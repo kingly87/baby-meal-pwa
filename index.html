@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#fff8ef">
+  <meta name="description" content="本地优先的宝宝作息、辅食与成长记录助手">
+  <link rel="manifest" href="./manifest.webmanifest">
+  <link rel="icon" href="./assets/icons/icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="./assets/styles/app.css">
+  <title>宝宝成长助手 V1</title>
+</head>
+<body>
+  <a class="skip-link" href="#app-main">跳到主要内容</a>
+  <div id="app" class="app-shell">
+    <header class="app-header"><div><p id="today-date" class="eyebrow"></p><h1 id="baby-greeting">宝宝成长助手</h1></div><button id="baby-switcher" class="avatar-button" aria-label="切换宝宝">宝</button></header>
+    <main id="app-main" tabindex="-1">
+      <section id="view-today" data-view="today" aria-labelledby="nav-today"></section>
+      <section id="view-meals" data-view="meals" hidden aria-labelledby="nav-meals"></section>
+      <section id="view-records" data-view="records" hidden aria-labelledby="nav-records"></section>
+      <section id="view-growth" data-view="growth" hidden aria-labelledby="nav-growth"></section>
+      <section id="view-settings" data-view="settings" hidden aria-labelledby="nav-settings"></section>
+    </main>
+    <nav class="bottom-nav" aria-label="主要导航">
+      <button id="nav-today" data-route="today" aria-current="page"><span>☀️</span>今天</button>
+      <button id="nav-meals" data-route="meals"><span>🥣</span>菜单</button>
+      <button id="nav-records" data-route="records"><span>✍️</span>记录</button>
+      <button id="nav-growth" data-route="growth"><span>🌱</span>成长</button>
+      <button id="nav-settings" data-route="settings"><span>⚙️</span>我的</button>
+    </nav>
+  </div>
+  <div id="toast-region" class="toast-region" aria-live="polite" aria-atomic="true"></div>
+  <script type="module" src="./src/app.js"></script>
+</body>
+</html>
+

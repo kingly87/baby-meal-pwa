@@ -1,0 +1,11 @@
+{
+  "name": "baby-growth-assistant-v1",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test",
+    "check": "node --check src/app.js"
+  }
+}
+
