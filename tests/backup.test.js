@@ -30,3 +30,9 @@ test('backup rejects duplicate ids and orphan baby records', () => {
   assert.throws(()=>previewBackup(JSON.stringify({...base,data:{...base.data,babies:[{id:'b1',name:'柚柚'},{id:'b1',name:'重复'}]}})),/重复 id/);
   assert.throws(()=>previewBackup(JSON.stringify({...base,data:{...base.data,dailyRecords:[{id:'r1',babyId:'missing'}]}})),/不存在的宝宝/);
 });
+
+test('backup rejects malformed nested menus and task dates', () => {
+  const base={app:'baby-growth-assistant',schemaVersion:1,data:{babies:[{id:'b1',name:'柚柚',stage:'stage4'}]}};
+  assert.throws(()=>previewBackup(JSON.stringify({...base,data:{...base.data,weeklyMenus:[{id:'w1',babyId:'b1',days:[{date:5,meals:[]}]}]}})),/weeklyMenus/);
+  assert.throws(()=>previewBackup(JSON.stringify({...base,data:{...base.data,taskInstances:[{id:'t1',babyId:'b1',date:'bad',plannedAt:'bad'}]}})),/taskInstances/);
+});

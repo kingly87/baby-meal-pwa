@@ -27,5 +27,13 @@ export function parseAndValidateBackup(text) {
   }
   const global=data.appSettings.find(setting=>setting.id==='global');
   if(global?.activeBabyId&&!babyIds.has(global.activeBabyId)) throw new Error('当前宝宝设置无效');
+  const date=value=>typeof value==='string'&&!Number.isNaN(new Date(value).getTime()),day=value=>typeof value==='string'&&/^\d{4}-\d{2}-\d{2}$/.test(value),fail=store=>{throw new Error(`${store} 包含无效字段`)};
+  for(const baby of data.babies)if(baby.stage&&!/^stage[1-5]$/.test(baby.stage))fail('babies');
+  for(const item of data.taskInstances)if(!day(item.date)||!date(item.plannedAt)||typeof item.title!=='string'||!['upcoming','current','adjusted','overdue','completed','skipped'].includes(item.status))fail('taskInstances');
+  for(const item of data.sleepSessions)if(!date(item.startAt)||item.endAt&&!date(item.endAt)||item.durationMinutes!=null&&(!Number.isFinite(item.durationMinutes)||item.durationMinutes<0))fail('sleepSessions');
+  for(const item of data.dailyRecords)if(!date(item.occurredAt)||!Number.isFinite(item.value)||typeof item.type!=='string')fail('dailyRecords');
+  for(const item of data.growthMeasurements)if(!day(item.date)||item.weight!=null&&!Number.isFinite(item.weight)||item.height!=null&&!Number.isFinite(item.height))fail('growthMeasurements');
+  for(const item of data.weeklyMenus)if(!Array.isArray(item.days)||item.days.some(entry=>!day(entry.date)||!Array.isArray(entry.meals)||entry.meals.some(meal=>typeof meal.id!=='string'||typeof meal.name!=='string'||!['planned','eaten','skipped'].includes(meal.status))))fail('weeklyMenus');
+  for(const item of data.shoppingItems)if(typeof item.name!=='string'||item.quantity!=null&&(!Number.isFinite(item.quantity)||item.quantity<0))fail('shoppingItems');
   return {app:value.app,schemaVersion:SCHEMA_VERSION,exportedAt:value.exportedAt||null,data};
 }

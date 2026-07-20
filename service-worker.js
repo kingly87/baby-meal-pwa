@@ -1,4 +1,4 @@
-const CACHE_NAME='baby-growth-v1-20260720';
+const CACHE_NAME='baby-growth-v1-20260720-r2';
 const APP_SHELL=[
   "./","./index.html","./manifest.webmanifest","./assets/styles/app.css","./assets/icons/icon.svg","./assets/icons/icon-192.svg","./assets/icons/icon-512.svg","./data/recipes.js",
   "./src/app.js","./src/db.js","./src/store.js","./src/router.js","./src/core/id.js","./src/core/dates.js","./src/core/schema.js",
@@ -17,4 +17,3 @@ async function navigationResponse(request){try{const response=await fetch(reques
 async function assetResponse(request){const cached=await caches.match(request);if(cached)return cached;const response=await fetch(request);if(response.ok){const cache=await caches.open(CACHE_NAME);cache.put(request,response.clone())}return response}
 self.addEventListener('fetch',event=>{const{request}=event;if(request.method!=='GET'||new URL(request.url).origin!==self.location.origin)return;if(request.mode === 'navigate')event.respondWith(navigationResponse(request));else event.respondWith(assetResponse(request))});
 self.addEventListener('notificationclick',event=>{event.notification.close();event.waitUntil(self.clients.matchAll({type:'window',includeUncontrolled:true}).then(clients=>{const existing=clients.find(client=>'focus'in client);return existing?existing.focus():self.clients.openWindow(event.notification.data?.url||'./')}))});
-

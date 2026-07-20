@@ -43,8 +43,13 @@ test('meal and growth screens expose shopping, preferences and tooth actions', (
 });
 
 test('records screen exposes sleep lifecycle and stable record management', () => {
-  const html=recordsView({records:[{id:'r1',type:'milk',value:120,occurredAt:'2026-07-20T08:00:00Z'}],sleeps:[]});
-  for(const action of ['sleep-start','sleep-end','edit-record','delete-record']) assert.match(html,new RegExp(`data-action="${action}"`));
+  const html=recordsView({records:[{id:'r1',type:'milk',value:120,occurredAt:'2026-07-20T08:00:00Z'}],sleeps:[{id:'s1',startAt:'2026-07-20T08:00:00Z',endAt:'2026-07-20T09:00:00Z',durationMinutes:60}]});
+  for(const action of ['sleep-start','sleep-end','edit-record','delete-record','edit-sleep','delete-sleep']) assert.match(html,new RegExp(`data-action="${action}"`));
+});
+
+test('records screen manages food observations and reminders after creation', () => {
+  const html=recordsView({observations:[{id:'f1',name:'南瓜',observeUntil:'2026-07-22'}],reminders:[{id:'m1',title:'体检',dueDate:'2026-07-25'}]});
+  for(const action of ['add-reaction','delete-observation','complete-reminder','delete-reminder']) assert.match(html,new RegExp(`data-action="${action}"`));
 });
 
 test('schedule editor supports enabling rules and adding a custom item', async () => {
