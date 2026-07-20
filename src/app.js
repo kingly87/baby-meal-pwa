@@ -10,12 +10,12 @@ import{selectPrimaryTask}from'./features/schedule/select-current.js';
 import{generateWeek,replaceMeal,setMealStatus}from'./features/meals/planner.js';
 import{buildShoppingList}from'./features/meals/shopping.js';
 import{createNumericRecord}from'./features/records/records.js';
-import{createSleepSession}from'./features/records/sleep.js';
+import{createSleepSession,minutesOverlappingLocalDay}from'./features/records/sleep.js';
 import{createObservation}from'./features/records/new-food.js';
 import{buildTimeline}from'./features/growth/timeline.js';
 import{chartModel}from'./features/growth/chart.js';
 import{createBackup,previewBackup,importBackup,resetApplication}from'./features/backup/backup.js';
-import{notificationState,requestNotifications,notifyDueTasks}from'./features/notifications/notifications.js';
+import{notificationState,requestNotifications,notifyDueTasks,nextNotificationDelay}from'./features/notifications/notifications.js';
 import{recipes}from'../data/recipes.js';
 import{mount}from'./ui/render.js';
 import{todayView}from'./ui/today.js';
@@ -32,13 +32,15 @@ export async function ensureDailySchedule(repository,baby,now=new Date(),idFacto
 
 async function browserApp(){
  const repo=new IndexedDbRepository(),model=await loadApplicationModel(repo),store=model.store;
+ let notificationRegistration=null,notificationTimer=null;const notifiedTasks=new Set();
  if(store.activeBaby){await ensureDailySchedule(repo,store.activeBaby);await store.load()}
  const router=createRouter({onRoute:render});router.bind();
- async function refresh(){await store.load();await render(router.current)}
+ async function scheduleNotifications(){clearTimeout(notificationTimer);if(notificationState()!=='granted'||!notificationRegistration)return;const pending=store.tasks.filter(task=>!notifiedTasks.has(task.id));for(const message of await notifyDueTasks(pending,{registration:notificationRegistration}))notifiedTasks.add(message.taskId);const delay=nextNotificationDelay(store.tasks.filter(task=>!notifiedTasks.has(task.id)));if(delay!==null)notificationTimer=setTimeout(scheduleNotifications,Math.min(delay+250,2147483647))}
+ async function refresh(){await store.load();await render(router.current);await scheduleNotifications()}
  async function render(route='today'){
   if(!store.activeBaby)return;
   const allData=await repo.exportAll(),line=buildTimeline(allData,{babyId:store.activeBabyId}),tasks=updateOverdue(store.tasks,new Date().toISOString()),primary=selectPrimaryTask(tasks),primaryIndex=tasks.findIndex(x=>x.id===primary?.id),next=tasks.slice(primaryIndex+1).find(x=>!['completed','skipped'].includes(x.status));
-  const sleeps=await repo.list('sleepSessions',{babyId:store.activeBabyId}),today=localDateKey(),sleepMinutes=sleeps.filter(x=>x.startAt?.startsWith(today)&&x.durationMinutes).reduce((sum,x)=>sum+x.durationMinutes,0);
+  const sleeps=await repo.list('sleepSessions',{babyId:store.activeBabyId}),today=localDateKey(),sleepMinutes=sleeps.reduce((sum,item)=>sum+minutesOverlappingLocalDay(item,today),0);
   const preferences=await repo.get('foodPreferences',store.activeBabyId)||{id:store.activeBabyId,babyId:store.activeBabyId,excluded:[],disliked:[],favorites:[]},shopping=await repo.list('shoppingItems',{babyId:store.activeBabyId});
   mount('view-today',todayView({baby:store.activeBaby,primary,next,sleepMinutes,timeline:line}));
   mount('view-meals',mealsView({week:store.week,recipes,stage:store.activeBaby.stage,shopping,preferences}));
@@ -89,11 +91,11 @@ async function browserApp(){
  async function deleteBaby(){if(store.babies.length<=1)return toast('至少保留一个宝宝');if(!confirm(`删除“${store.activeBaby.name}”及其全部本地数据？`))return;const id=store.activeBabyId;for(const name of STORE_NAMES){for(const item of await repo.list(name,{babyId:id}))await repo.delete(name,item.id)}await repo.delete('babies',id);const next=store.babies.find(b=>b.id!==id);await repo.put('appSettings',{id:'global',activeBabyId:next.id,updatedAt:new Date().toISOString()});await refresh();toast('宝宝及其本地数据已删除')}
  async function openSchedule(){const template=(await repo.list('scheduleTemplates',{babyId:store.activeBabyId}))[0]||createDefaultTemplate(store.activeBabyId),values=await openDialog({title:'调整核心间隔',body:`<label>起床后喝奶（分钟）</label><input name="milk" type="number" min="0" value="${template.rules[1].afterMinutes}"><label>喝奶后辅食（分钟）</label><input name="meal" type="number" min="0" value="${template.rules[2].afterMinutes}"><label>辅食后午觉（分钟）</label><input name="sleep" type="number" min="0" value="${template.rules[3].afterMinutes}">`});if(values){template.rules[1].afterMinutes=Number(values.milk);template.rules[2].afterMinutes=Number(values.meal);template.rules[3].afterMinutes=Number(values.sleep);await repo.put('scheduleTemplates',template);toast('作息模板已保存，明日任务将使用新间隔')}}
  async function openPreferences(){const prefs=await repo.get('foodPreferences',store.activeBabyId)||{id:store.activeBabyId,babyId:store.activeBabyId,excluded:[],disliked:[],favorites:[]},values=await openDialog({title:'饮食偏好',body:`<label>绝对排除（逗号分隔）</label><input name="excluded" value="${(prefs.excluded||[]).join(',')}"><label>不喜欢（逗号分隔）</label><input name="disliked" value="${(prefs.disliked||[]).join(',')}">`});if(values){const split=value=>value.split(/[,，]/).map(x=>x.trim()).filter(Boolean);await repo.put('foodPreferences',{...prefs,excluded:split(values.excluded),disliked:split(values.disliked),updatedAt:new Date().toISOString()});toast('饮食规则已保存')}}
- async function enableNotifications(){if(notificationState()==='unsupported')return toast('当前浏览器不支持通知');if(!confirm('通知只能尽力提醒，不能作为医疗或安全报警。是否继续开启？'))return;const permission=await requestNotifications();toast(permission==='granted'?'通知已开启':'未获得通知权限')}
+ async function enableNotifications(){if(notificationState()==='unsupported')return toast('当前浏览器不支持通知');if(!confirm('通知只能尽力提醒，不能作为医疗或安全报警。是否继续开启？'))return;const permission=await requestNotifications();if(permission==='granted')await scheduleNotifications();toast(permission==='granted'?'通知已开启':'未获得通知权限')}
  async function exportData(){const backup=await createBackup(repo),blob=new Blob([JSON.stringify(backup,null,2)],{type:'application/json'}),link=document.createElement('a');link.href=URL.createObjectURL(blob);link.download=`宝宝成长助手V1备份-${localDateKey()}.json`;link.click();URL.revokeObjectURL(link.href);localStorage.setItem('babyGrowthAssistantV1LastExport',backup.exportedAt);toast('备份已导出')}
  async function importData(event){const file=event.target.files[0];if(!file)return;try{const text=await file.text(),preview=previewBackup(text);if(confirm(`备份包含 ${preview.babyCount} 个宝宝、${preview.recordCount} 条数据。确认覆盖当前数据？`)){await importBackup(repo,text);await refresh();toast('备份导入成功')}}catch(error){toast(error.message)}finally{event.target.value=''}}
  async function resetData(){if(!confirm('确定清除这台设备上的全部 V1 数据吗？此操作不可恢复。'))return;if(!confirm('请再次确认：是否已导出备份并继续清除？'))return;await resetApplication(repo);location.reload()}
- if(model.needsOnboarding){document.body.insertAdjacentHTML('beforeend',onboardingView());document.getElementById('onboarding-form').onsubmit=event=>{event.preventDefault();saveOnboarding(Object.fromEntries(new FormData(event.currentTarget)))}}else{await render();if('serviceWorker'in navigator){const registration=await navigator.serviceWorker.register('./service-worker.js');if(notificationState()==='granted')await notifyDueTasks(store.tasks,{registration})}}
+ if(model.needsOnboarding){document.body.insertAdjacentHTML('beforeend',onboardingView());document.getElementById('onboarding-form').onsubmit=event=>{event.preventDefault();saveOnboarding(Object.fromEntries(new FormData(event.currentTarget)))}}else{await render();if('serviceWorker'in navigator){notificationRegistration=await navigator.serviceWorker.register('./service-worker.js');await scheduleNotifications()}document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')refresh()});window.addEventListener('focus',scheduleNotifications)}
 }
 
 if(typeof document!=='undefined')browserApp().catch(error=>{console.error(error);document.body.innerHTML=`<main class="fatal"><h1>应用启动失败</h1><p>${String(error.message||error)}</p><button onclick="location.reload()">重新加载</button></main>`});
