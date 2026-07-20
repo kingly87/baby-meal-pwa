@@ -24,3 +24,8 @@ test('service worker has safe caching, navigation fallback and controlled update
   for(const file of appFiles) assert.ok(sw.includes(JSON.stringify(file)),file);
   for(const file of await javascriptFiles('src')) assert.ok(sw.includes(JSON.stringify(`./${file}`)),`missing offline cache entry: ${file}`);
 });
+
+test('application asks before activating a waiting service worker update', async () => {
+  const app=await readFile('src/app.js','utf8');
+  for(const token of ['registration.waiting','updatefound','controllerchange','SKIP_WAITING']) assert.ok(app.includes(token),token);
+});

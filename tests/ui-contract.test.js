@@ -46,3 +46,13 @@ test('records screen exposes sleep lifecycle and stable record management', () =
   const html=recordsView({records:[{id:'r1',type:'milk',value:120,occurredAt:'2026-07-20T08:00:00Z'}],sleeps:[]});
   for(const action of ['sleep-start','sleep-end','edit-record','delete-record']) assert.match(html,new RegExp(`data-action="${action}"`));
 });
+
+test('schedule editor supports enabling rules and adding a custom item', async () => {
+  const app=await readFile('src/app.js','utf8');
+  for(const field of ['customTitle','customType','customAfter','enabled-']) assert.ok(app.includes(field),field);
+});
+
+test('growth timeline exposes filterable event types', () => {
+  const html=growthView({timeline:[{type:'sleep',date:'2026-07-20',title:'睡眠'}]});
+  assert.match(html,/data-type="sleep"/); assert.match(html,/value="sleep"/); assert.match(html,/value="task"/);
+});
