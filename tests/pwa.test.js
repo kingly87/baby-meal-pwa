@@ -1,0 +1,31 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { readFile, access, readdir } from 'node:fs/promises';
+
+async function javascriptFiles(directory) {
+  const entries=await readdir(directory,{withFileTypes:true});
+  const nested=await Promise.all(entries.map(entry=>entry.isDirectory()
+    ? javascriptFiles(`${directory}/${entry.name}`)
+    : entry.name.endsWith('.js') ? [`${directory}/${entry.name}`] : []));
+  return nested.flat();
+}
+
+test('manifest identifies installable V1 with 192 and 512 icons', async () => {
+  const manifest=JSON.parse(await readFile('manifest.webmanifest','utf8'));
+  assert.equal(manifest.name,'宝宝成长助手 V1'); assert.equal(manifest.display,'standalone');
+  assert.ok(manifest.icons.some(icon=>icon.sizes==='192x192')); assert.ok(manifest.icons.some(icon=>icon.sizes==='512x512'));
+  await access('assets/icons/icon-192.svg'); await access('assets/icons/icon-512.svg');
+});
+
+test('service worker has safe caching, navigation fallback and controlled updates', async () => {
+  const sw=await readFile('service-worker.js','utf8');
+  for(const token of ['response.ok','request.mode === \'navigate\'','SKIP_WAITING','caches.delete','notificationclick','showNotification']) assert.ok(sw.includes(token),token);
+  const appFiles=['./','./index.html','./assets/styles/app.css','./data/recipes.js','./src/app.js','./manifest.webmanifest'];
+  for(const file of appFiles) assert.ok(sw.includes(JSON.stringify(file)),file);
+  for(const file of await javascriptFiles('src')) assert.ok(sw.includes(JSON.stringify(`./${file}`)),`missing offline cache entry: ${file}`);
+});
+
+test('application asks before activating a waiting service worker update', async () => {
+  const app=await readFile('src/app.js','utf8');
+  for(const token of ['registration.waiting','updatefound','controllerchange','SKIP_WAITING']) assert.ok(app.includes(token),token);
+});

@@ -1,0 +1,12 @@
+export function createNumericRecord(input, createId = () => crypto.randomUUID()) {
+  const value = Number(input.value);
+  if (!Number.isFinite(value)) throw new Error('请输入有效数值');
+  if (value < 0) throw new Error('记录数值不能为负数');
+  if (!input.babyId || Number.isNaN(new Date(input.occurredAt).getTime())) throw new Error('记录日期无效');
+  const now = new Date().toISOString();
+  return { id:createId(), babyId:input.babyId, type:input.type, value, unit:input.unit || (input.type === 'milk' || input.type === 'water' ? 'ml' : ''), occurredAt:new Date(input.occurredAt).toISOString(), note:String(input.note || '').trim(), createdAt:now, updatedAt:now };
+}
+
+export function updateById(records, id, patch) { let found=false; const result=records.map(item=>item.id===id?(found=true,{...item,...patch,id:item.id,updatedAt:new Date().toISOString()}):{...item}); if(!found)throw new Error('找不到记录'); return result; }
+export function removeById(records, id) { if(!records.some(item=>item.id===id))throw new Error('找不到记录'); return records.filter(item=>item.id!==id).map(item=>({...item})); }
+
