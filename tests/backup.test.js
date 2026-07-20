@@ -36,3 +36,15 @@ test('backup rejects malformed nested menus and task dates', () => {
   assert.throws(()=>previewBackup(JSON.stringify({...base,data:{...base.data,weeklyMenus:[{id:'w1',babyId:'b1',days:[{date:5,meals:[]}]}]}})),/weeklyMenus/);
   assert.throws(()=>previewBackup(JSON.stringify({...base,data:{...base.data,taskInstances:[{id:'t1',babyId:'b1',date:'bad',plannedAt:'bad'}]}})),/taskInstances/);
 });
+
+test('backup validates templates preferences reminders and application settings', () => {
+  const base={app:'baby-growth-assistant',schemaVersion:1,data:{babies:[{id:'b1',name:'柚柚',stage:'stage4'}]}};
+  const invalid=[
+    {scheduleTemplates:[{id:'s1',babyId:'b1',rules:'bad'}]},
+    {foodPreferences:[{id:'p1',babyId:'b1',excluded:'南瓜'}]},
+    {reminders:[{id:'m1',babyId:'b1',title:'体检',dueDate:'bad'}]},
+    {newFoodObservations:[{id:'n1',babyId:'b1',name:'南瓜',date:'2026-07-20',reactions:'bad'}]},
+    {appSettings:[{id:'global',activeBabyId:'b1',notifiedTaskIds:'bad'}]}
+  ];
+  for(const data of invalid) assert.throws(()=>previewBackup(JSON.stringify({...base,data:{...base.data,...data}})),/无效字段/);
+});

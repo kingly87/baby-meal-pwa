@@ -35,5 +35,11 @@ export function parseAndValidateBackup(text) {
   for(const item of data.growthMeasurements)if(!day(item.date)||item.weight!=null&&!Number.isFinite(item.weight)||item.height!=null&&!Number.isFinite(item.height))fail('growthMeasurements');
   for(const item of data.weeklyMenus)if(!Array.isArray(item.days)||item.days.some(entry=>!day(entry.date)||!Array.isArray(entry.meals)||entry.meals.some(meal=>typeof meal.id!=='string'||typeof meal.name!=='string'||!['planned','eaten','skipped'].includes(meal.status))))fail('weeklyMenus');
   for(const item of data.shoppingItems)if(typeof item.name!=='string'||item.quantity!=null&&(!Number.isFinite(item.quantity)||item.quantity<0))fail('shoppingItems');
+  for(const item of data.scheduleTemplates)if(!Array.isArray(item.rules)||!item.rules.length||item.rules.some(rule=>typeof rule.type!=='string'||typeof rule.title!=='string'||!Number.isFinite(rule.afterMinutes)||rule.afterMinutes<0))fail('scheduleTemplates');
+  for(const item of data.toothRecords)if(!day(item.date)||!Number.isFinite(item.number)||item.number<1)fail('toothRecords');
+  for(const item of data.newFoodObservations)if(typeof item.name!=='string'||!day(item.date)||!day(item.observeUntil)||!Array.isArray(item.reactions)||item.reactions.some(reaction=>!day(reaction.date)||typeof reaction.text!=='string'))fail('newFoodObservations');
+  for(const item of data.reminders)if(typeof item.title!=='string'||!day(item.dueDate)||item.completedAt&&!date(item.completedAt))fail('reminders');
+  for(const item of data.foodPreferences)if(!Array.isArray(item.excluded)||!Array.isArray(item.disliked)||!Array.isArray(item.favorites)||item.excluded.some(value=>typeof value!=='string')||item.disliked.some(value=>typeof value!=='string'))fail('foodPreferences');
+  for(const item of data.appSettings)if(item.activeBabyId&&!babyIds.has(item.activeBabyId)||item.notifiedTaskIds!=null&&(!Array.isArray(item.notifiedTaskIds)||item.notifiedTaskIds.some(value=>typeof value!=='string'))||item.notificationsEnabled!=null&&typeof item.notificationsEnabled!=='boolean')fail('appSettings');
   return {app:value.app,schemaVersion:SCHEMA_VERSION,exportedAt:value.exportedAt||null,data};
 }
