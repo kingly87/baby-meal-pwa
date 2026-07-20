@@ -12,6 +12,11 @@ test('today view exposes current, next, sleep, quick actions and timeline region
   for(const id of ['current-task-card','next-task-card','sleep-summary','quick-actions','today-timeline']) assert.match(html,new RegExp(`id="${id}"`));
 });
 
+test('today task offers cascade, keep-later and manual adjustment controls', () => {
+  const html=todayView({baby:{name:'柚柚'},primary:{id:'t1',title:'辅食',type:'meal',status:'upcoming',plannedAt:'2026-07-20T10:00:00Z'},next:null,sleepMinutes:0,timeline:[]});
+  for(const action of ['complete-task','complete-task-keep','adjust-task']) assert.match(html,new RegExp(`data-action="${action}"`));
+});
+
 test('onboarding contains labeled baby, birthday, stage and privacy fields', () => {
   const html=onboardingView();
   for(const id of ['onboarding-name','onboarding-birthday','onboarding-stage','onboarding-wake','onboarding-privacy']) assert.match(html,new RegExp(`id="${id}"`));
