@@ -1,0 +1,3 @@
+export function sleepDurationMinutes(startAt,endAt){const start=new Date(startAt).getTime(),end=new Date(endAt).getTime();if(Number.isNaN(start)||Number.isNaN(end))throw new Error('睡眠时间无效');if(end<=start)throw new Error('睡眠结束时间必须晚于开始时间');return Math.round((end-start)/60000)}
+export function createSleepSession(input,createId=()=>crypto.randomUUID()){const durationMinutes=input.endAt?sleepDurationMinutes(input.startAt,input.endAt):null;const now=new Date().toISOString();return{id:createId(),babyId:input.babyId,type:input.type||'night',startAt:new Date(input.startAt).toISOString(),endAt:input.endAt?new Date(input.endAt).toISOString():null,durationMinutes,note:String(input.note||'').trim(),createdAt:now,updatedAt:now}}
+
