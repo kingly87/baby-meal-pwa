@@ -35,3 +35,8 @@ test('manual next time overrides cascade and overdue task has priority', () => {
   tasks = updateOverdue(tasks, '2026-07-20T10:50:00.000Z');
   assert.equal(selectPrimaryTask(tasks, '2026-07-20T10:50:00.000Z').status, 'overdue');
 });
+
+test('manual next task time must be after completion time', () => {
+  const tasks=[{id:'a',plannedAt:'2026-07-20T10:00:00Z',status:'upcoming',afterMinutes:0},{id:'b',plannedAt:'2026-07-20T11:00:00Z',status:'upcoming',afterMinutes:60}];
+  assert.throws(()=>completeTask(tasks,'a','2026-07-20T10:30:00Z',{nextPlannedAt:'2026-07-20T10:00:00Z'}),/晚于/);
+});

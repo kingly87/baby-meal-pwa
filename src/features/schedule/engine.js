@@ -13,6 +13,7 @@ export function generateTasks({ babyId, date, wakeAt, template, createId }) {
 }
 
 export function completeTask(tasks, id, actualAt, { cascade = true, nextPlannedAt } = {}) {
+  if(nextPlannedAt&&new Date(nextPlannedAt).getTime()<=new Date(actualAt).getTime()) throw new Error('下一事项时间必须晚于完成时间');
   const result = tasks.map(task => ({ ...task }));
   const index = result.findIndex(task => task.id === id);
   if (index < 0) throw new Error('找不到要完成的事项');
@@ -30,4 +31,3 @@ export function completeTask(tasks, id, actualAt, { cascade = true, nextPlannedA
 
 export function skipTask(tasks, id, at = new Date().toISOString()) { return tasks.map(task => task.id === id ? { ...task, status: 'skipped', actualAt: at, updatedAt: at } : { ...task }); }
 export function updateOverdue(tasks, now) { const time = new Date(now).getTime(); return tasks.map(task => ['upcoming','current','adjusted'].includes(task.status) && new Date(task.plannedAt).getTime() < time ? { ...task, status: 'overdue', updatedAt: now } : { ...task }); }
-
