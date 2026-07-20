@@ -12,15 +12,21 @@ test('backup exports version, timestamp, all stores and counts', async () => {
 
 test('invalid and old backups are rejected before replacement', async () => {
   assert.throws(()=>previewBackup('{bad'),/无法解析/);
-  assert.throws(()=>previewBackup(JSON.stringify({schemaVersion:0,data:{}})),/不支持/);
+  assert.throws(()=>previewBackup(JSON.stringify({app:'baby-growth-assistant',schemaVersion:0,data:{}})),/不支持/);
   const repo=new MemoryRepository({babies:[{id:'original'}]});
-  await assert.rejects(importBackup(repo,JSON.stringify({schemaVersion:1,data:{babies:[{name:'missing id'}]}})),/缺少 id/);
+  await assert.rejects(importBackup(repo,JSON.stringify({app:'baby-growth-assistant',schemaVersion:1,data:{babies:[{name:'missing id'}]}})),/缺少 id/);
   assert.deepEqual((await repo.list('babies')).map(x=>x.id),['original']);
 });
 
 test('valid import replaces atomically and reset clears all stores', async () => {
   const repo=new MemoryRepository({babies:[{id:'old'}]});
-  const payload={schemaVersion:1,exportedAt:'2026-07-20T12:00:00.000Z',data:{babies:[{id:'new',name:'新宝宝'}]}};
+  const payload={app:'baby-growth-assistant',schemaVersion:1,exportedAt:'2026-07-20T12:00:00.000Z',data:{babies:[{id:'new',name:'新宝宝'}]}};
   await importBackup(repo,JSON.stringify(payload)); assert.deepEqual((await repo.list('babies')).map(x=>x.id),['new']);
   await resetApplication(repo,{removeItem(){this.called=true}}); assert.equal((await repo.list('babies')).length,0);
+});
+
+test('backup rejects duplicate ids and orphan baby records', () => {
+  const base={app:'baby-growth-assistant',schemaVersion:1,data:{babies:[{id:'b1',name:'柚柚'}]}};
+  assert.throws(()=>previewBackup(JSON.stringify({...base,data:{...base.data,babies:[{id:'b1',name:'柚柚'},{id:'b1',name:'重复'}]}})),/重复 id/);
+  assert.throws(()=>previewBackup(JSON.stringify({...base,data:{...base.data,dailyRecords:[{id:'r1',babyId:'missing'}]}})),/不存在的宝宝/);
 });
