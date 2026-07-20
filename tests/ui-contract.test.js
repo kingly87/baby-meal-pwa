@@ -6,6 +6,7 @@ import { formatTimelineDate } from '../src/ui/render.js';
 import { onboardingView } from '../src/ui/onboarding.js';
 import { mealsView } from '../src/ui/meals.js';
 import { growthView, chartSvg } from '../src/ui/growth.js';
+import { recordsView } from '../src/ui/records.js';
 
 test('today view exposes current, next, sleep, quick actions and timeline regions', () => {
   const html=todayView({baby:{name:'柚柚'},primary:null,next:null,sleepMinutes:0,timeline:[]});
@@ -39,4 +40,9 @@ test('meal and growth screens expose shopping, preferences and tooth actions', (
   assert.match(meals,/data-stage="stage4"/);
   assert.match(growthView({timeline:[]}),/data-growth="tooth"/);
   assert.match(chartSvg({ready:true,min:8,max:9,points:[{x:0,y:1,value:8,date:'2026-07-20'},{x:1,y:0,value:9,date:'2026-07-21'}]}),/<polyline/);
+});
+
+test('records screen exposes sleep lifecycle and stable record management', () => {
+  const html=recordsView({records:[{id:'r1',type:'milk',value:120,occurredAt:'2026-07-20T08:00:00Z'}],sleeps:[]});
+  for(const action of ['sleep-start','sleep-end','edit-record','delete-record']) assert.match(html,new RegExp(`data-action="${action}"`));
 });
