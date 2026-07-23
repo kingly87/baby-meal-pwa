@@ -8,6 +8,26 @@ import { mealsView } from '../src/ui/meals.js';
 import { growthView, chartSvg } from '../src/ui/growth.js';
 import { recordsView } from '../src/ui/records.js';
 import { formatDateTimeLocal } from '../src/app.js';
+import { openActionDialog } from '../src/ui/dialogs.js';
+
+function fakeDialogDocument(){
+  class Node extends EventTarget{
+    constructor(){super();this.nodes=new Map();this.removed=false}
+    set innerHTML(value){
+      this.html=value;
+      const title={textContent:''},cancel={onclick:null};
+      this.nodes.set('h2',title);this.nodes.set('[data-cancel]',cancel);
+      this.choices=['keep','adjust','skip'].map(value=>({dataset:{value},onclick:null,focus(){this.focused=true}}));
+    }
+    querySelector(selector){if(selector==='[data-value]')return this.choices[0];return this.nodes.get(selector)}
+    querySelectorAll(selector){return selector==='[data-value]'?this.choices:[]}
+    remove(){this.removed=true}
+  }
+  const document=new EventTarget(),wrap=new Node();
+  document.createElement=()=>wrap;
+  document.body={append(node){this.last=node}};
+  return{document,wrap};
+}
 
 test('today view exposes current, next, sleep, quick actions and timeline regions', () => {
   const html=todayView({baby:{name:'柚柚'},primary:null,next:null,sleepMinutes:0,timeline:[]});
@@ -65,14 +85,45 @@ test('mobile task and sleep controls use responsive full-size layouts', async ()
   const css=await readFile('assets/styles/app.css','utf8');
   assert.match(css,/\.hero-actions\s*\{[^}]*grid-template-columns\s*:\s*1fr\s+104px[^}]*\}/s);
   assert.match(css,/\.hero-actions\s+button\s*\{[^}]*min-height\s*:\s*48px[^}]*\}/s);
+  assert.match(css,/\.hero-actions\s+button\s*\{[^}]*white-space\s*:\s*nowrap[^}]*\}/s);
+  assert.match(css,/\.action-list\s+button\s*\{[^}]*white-space\s*:\s*nowrap[^}]*\}/s);
   assert.match(css,/\.sleep-main-action\s*\{[^}]*width\s*:\s*100%[^}]*min-height\s*:\s*50px[^}]*\}/s);
   assert.match(css,/@media\s*\(max-width\s*:\s*380px\)\s*\{[^}]*\.hero-actions\s*\{[^}]*grid-template-columns\s*:\s*1fr/s);
 });
 
-test('task action dialog exposes three explicit choices', async () => {
-  const dialogs=await readFile('src/ui/dialogs.js','utf8');
-  assert.match(dialogs,/export function openActionDialog/);
-  for(const value of ['keep','adjust','skip']) assert.match(dialogs,new RegExp(`data-value=["'\`]${value}["'\`]`));
+test('task action dialog resolves every explicit choice and cleans up', async () => {
+  for(const choice of ['keep','adjust','skip']){
+    const fake=fakeDialogDocument(),promise=openActionDialog({title:'<更多>',document:fake.document});
+    assert.equal(fake.wrap.querySelector('h2').textContent,'<更多>');
+    fake.wrap.choices.find(button=>button.dataset.value===choice).onclick();
+    assert.equal(await promise,choice);
+    assert.equal(fake.wrap.removed,true);
+  }
+});
+
+test('task action dialog cancels from button, backdrop and Escape without leaking listeners', async () => {
+  for(const cancel of ['button','backdrop','escape']){
+    const fake=fakeDialogDocument();
+    let activeKeydown=0;
+    const add=fake.document.addEventListener.bind(fake.document),remove=fake.document.removeEventListener.bind(fake.document);
+    fake.document.addEventListener=(type,listener)=>{if(type==='keydown')activeKeydown++;add(type,listener)};
+    fake.document.removeEventListener=(type,listener)=>{if(type==='keydown')activeKeydown--;remove(type,listener)};
+    const promise=openActionDialog({title:'更多',document:fake.document});
+    if(cancel==='button')fake.wrap.querySelector('[data-cancel]').onclick();
+    if(cancel==='backdrop')fake.wrap.dispatchEvent(new Event('click'));
+    if(cancel==='escape'){const event=new Event('keydown');Object.defineProperty(event,'key',{value:'Escape'});fake.document.dispatchEvent(event)}
+    assert.equal(await promise,null);
+    assert.equal(fake.wrap.removed,true);
+    assert.equal(activeKeydown,0);
+    fake.wrap.querySelector('[data-cancel]').onclick();
+    assert.equal(activeKeydown,0);
+  }
+});
+
+test('task action handlers are shared and obsolete top-level bindings are removed', async () => {
+  const app=await readFile('src/app.js','utf8');
+  for(const name of ['handleCompleteKeep','handleAdjustTask','handleSkipTask']) assert.match(app,new RegExp(`function ${name}\\(`));
+  for(const action of ['complete-task-keep','adjust-task','skip-task']) assert.doesNotMatch(app,new RegExp(`querySelectorAll\\('\\[data-action="${action}"\\]'\\)`));
 });
 
 test('sleep history labels known sleep types and preserves a fallback for legacy records', () => {
