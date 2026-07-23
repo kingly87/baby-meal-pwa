@@ -19,6 +19,6 @@ test('daily startup creates one schedule per baby and date without duplicates', 
 
 test('startup loads active baby and only today scoped tasks', async () => {
   const repo=new MemoryRepository({babies:[{id:'b1',name:'柚柚'}],appSettings:[{id:'global',activeBabyId:'b1'}],taskInstances:[{id:'old',babyId:'b1',date:'2026-07-19',status:'overdue',plannedAt:'2026-07-19T10:00:00Z'},{id:'t2',babyId:'b1',date:'2026-07-20',status:'upcoming',plannedAt:'2026-07-20T12:00:00Z'},{id:'t1',babyId:'b1',date:'2026-07-20',status:'upcoming',plannedAt:'2026-07-20T10:00:00Z'}]});
-  const model=await loadApplicationModel(repo,{now:()=>new Date('2026-07-20T08:00:00Z')});
+  const model=await loadApplicationModel(repo,{now:()=>new Date(2026,6,20,12)});
   assert.equal(model.store.activeBaby.name,'柚柚'); assert.deepEqual(model.store.tasks.map(task=>task.id),['t1','t2']);
 });
