@@ -5,7 +5,7 @@ import{createId}from'./core/id.js';
 import{localDateKey}from'./core/dates.js';
 import{STORE_NAMES}from'./core/schema.js';
 import{createDefaultTemplate}from'./features/schedule/template.js';
-import{generateTasks,completeTask,skipTask,updateOverdue}from'./features/schedule/engine.js';
+import{generateTasks,completeTask,skipTask,adjustTask,updateOverdue}from'./features/schedule/engine.js';
 import{selectPrimaryTask}from'./features/schedule/select-current.js';
 import{generateWeek,replaceMeal,setMealStatus}from'./features/meals/planner.js';
 import{buildShoppingList}from'./features/meals/shopping.js';
@@ -58,7 +58,7 @@ async function browserApp(){
  async function saveOnboarding(values){const now=new Date().toISOString(),baby={id:createId(),name:values.name.trim(),birthday:values.birthday||'',stage:values.stage,createdAt:now,updatedAt:now};await repo.put('babies',baby);await repo.put('appSettings',{id:'global',activeBabyId:baby.id,createdAt:now,updatedAt:now});const template=createDefaultTemplate(baby.id);await repo.put('scheduleTemplates',template);const wakeAt=new Date(`${localDateKey()}T${values.wake||'08:00'}:00`).toISOString();const tasks=generateTasks({babyId:baby.id,date:localDateKey(),wakeAt,template,createId});for(const task of tasks)await repo.put('taskInstances',task);document.querySelector('.modal-backdrop')?.remove();await refresh();toast('已创建宝宝的第一天');}
  function bindActions(){
   async function handleCompleteKeep(id){const now=new Date().toISOString();for(const task of completeTask(store.tasks,id,now,{cascade:false}))await repo.put('taskInstances',task);await refresh();toast('已完成，后续时间保持不变')}
-  async function handleAdjustTask(id){const task=store.tasks.find(item=>item.id===id),values=await openDialog({title:'调整当前事项',body:`<label>计划时间</label><input name="time" type="time" value="${new Date(task.plannedAt).toTimeString().slice(0,5)}" required>`});if(!values)return;await repo.put('taskInstances',{...task,plannedAt:new Date(`${task.date}T${values.time}:00`).toISOString(),status:'adjusted',updatedAt:new Date().toISOString()});await refresh();toast('事项时间已调整')}
+  async function handleAdjustTask(id){const task=store.tasks.find(item=>item.id===id),values=await openDialog({title:'调整当前事项',body:`<label>计划时间</label><input name="time" type="time" value="${new Date(task.plannedAt).toTimeString().slice(0,5)}" required>`});if(!values)return;await repo.put('taskInstances',adjustTask(task,new Date(`${task.date}T${values.time}:00`).toISOString(),new Date().toISOString()));await refresh();toast('事项时间已调整')}
   async function handleSkipTask(id){for(const task of skipTask(store.tasks,id))await repo.put('taskInstances',task);await refresh();toast('已跳过当前事项')}
   document.querySelectorAll('[data-action="complete-task"]').forEach(button=>button.onclick=async()=>{const now=new Date().toISOString();for(const task of completeTask(store.tasks,button.dataset.id,now,{cascade:true}))await repo.put('taskInstances',task);await refresh();toast('已完成，下一事项已更新')});
   document.querySelectorAll('[data-action="task-more"]').forEach(button=>button.onclick=async()=>{const action=await openActionDialog({title:'更多操作'});switch(action){case'keep':return handleCompleteKeep(button.dataset.id);case'adjust':return handleAdjustTask(button.dataset.id);case'skip':return handleSkipTask(button.dataset.id)}});
