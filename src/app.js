@@ -27,7 +27,7 @@ import{onboardingView}from'./ui/onboarding.js';
 import{toast}from'./ui/feedback.js';
 import{openDialog}from'./ui/dialogs.js';
 
-export async function loadApplicationModel(repository){const store=await new AppStore(repository).load();return{store,needsOnboarding:!store.babies.length}}
+export async function loadApplicationModel(repository,options){const store=await new AppStore(repository,options).load();return{store,needsOnboarding:!store.babies.length}}
 export async function ensureDailySchedule(repository,baby,now=new Date(),idFactory=createId){const date=localDateKey(now),existing=(await repository.list('taskInstances',{babyId:baby.id})).filter(task=>task.date===date);if(existing.length)return existing;let template=(await repository.list('scheduleTemplates',{babyId:baby.id}))[0];if(!template){template=createDefaultTemplate(baby.id);await repository.put('scheduleTemplates',template)}const wakeAt=new Date(`${date}T08:00:00`).toISOString(),tasks=generateTasks({babyId:baby.id,date,wakeAt,template,createId:idFactory});for(const task of tasks)await repository.put('taskInstances',task);return tasks}
 
 async function browserApp(){
