@@ -6,6 +6,21 @@ function copyTasks(tasks) {
   return tasks.map(task => ({ ...task }));
 }
 
+function anchored(task,changes){
+  const sleepAnchorBaseline=task.sleepAnchorBaseline||{
+    plannedAt:task.plannedAt,status:task.status,actualAt:task.actualAt,updatedAt:task.updatedAt
+  };
+  return{...task,...changes,sleepAnchorBaseline};
+}
+
+export function restoreSleepAnchors(tasks){
+  return tasks.map(task=>{
+    if(!task.sleepAnchorBaseline)return{...task};
+    const{sleepAnchorBaseline,...rest}=task;
+    return{...rest,...sleepAnchorBaseline};
+  });
+}
+
 function matchesSleepScope(task, babyId, date) {
   return task.babyId === babyId && task.date === date;
 }
@@ -36,7 +51,7 @@ function cascade(tasks, entries, startIndex, base, anchorAt) {
       continue;
     }
     const plannedAt = addMinutes(base, task.afterMinutes);
-    tasks[index] = { ...task, plannedAt, status: 'upcoming', updatedAt: anchorAt };
+    tasks[index] = anchored(task,{ plannedAt, status: 'upcoming', updatedAt: anchorAt });
     base = plannedAt;
   }
 }
@@ -56,12 +71,11 @@ export function applySleepAnchor(tasks, sleep, { napToMealMinutes = 120 } = {}) 
     if (wakePosition < 0) return result;
     const wakeIndex = entries[wakePosition].index;
     if (['skipped', 'adjusted'].includes(result[wakeIndex].status)) return result;
-    result[wakeIndex] = {
-      ...result[wakeIndex],
+    result[wakeIndex] = anchored(result[wakeIndex],{
       status: 'completed',
       actualAt: sleep.endAt,
       updatedAt: sleep.endAt
-    };
+    });
     cascade(result, entries, wakePosition, sleep.endAt, sleep.endAt);
     return result;
   }
@@ -83,12 +97,11 @@ export function applySleepAnchor(tasks, sleep, { napToMealMinutes = 120 } = {}) 
 
   const plannedAt = addMinutes(sleep.endAt, napToMealMinutes);
   const mealIndex = mealEntry.index;
-  result[mealIndex] = {
-    ...result[mealIndex],
+  result[mealIndex] = anchored(result[mealIndex],{
     plannedAt,
     status: 'upcoming',
     updatedAt: sleep.endAt
-  };
+  });
   cascade(result, entries, entries.indexOf(mealEntry), plannedAt, sleep.endAt);
   return result;
 }

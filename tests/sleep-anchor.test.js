@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { applySleepAnchor } from '../src/features/schedule/sleep-anchor.js';
+import { applySleepAnchor, restoreSleepAnchors } from '../src/features/schedule/sleep-anchor.js';
 
 const task = (id, type, plannedAt, afterMinutes, status = 'upcoming', extra = {}) => ({
   id,
@@ -31,9 +31,29 @@ test('night sleep completion anchors wake and cascades the following schedule', 
     ...tasks[0],
     status: 'completed',
     actualAt: '2026-07-20T07:00:00.000Z',
-    updatedAt: '2026-07-20T07:00:00.000Z'
+    updatedAt: '2026-07-20T07:00:00.000Z',
+    sleepAnchorBaseline:{
+      plannedAt:tasks[0].plannedAt,status:tasks[0].status,actualAt:tasks[0].actualAt,updatedAt:tasks[0].updatedAt
+    }
   });
   assert.equal(result[1].plannedAt, '2026-07-20T07:20:00.000Z');
+});
+
+test('sleep anchors restore original task fields and preserve the first baseline across replays', () => {
+  const original=[
+    task('wake','wake','2026-07-20T08:00:00.000Z',0),
+    task('meal','meal','2026-07-20T10:00:00.000Z',120)
+  ];
+  const first=applySleepAnchor(original,{type:'night',babyId:'baby-1',endAt:'2026-07-20T07:00:00.000Z'});
+  const replayed=applySleepAnchor(first,{type:'night',babyId:'baby-1',endAt:'2026-07-20T06:30:00.000Z'});
+  assert.deepEqual(replayed[0].sleepAnchorBaseline,{
+    plannedAt:original[0].plannedAt,status:original[0].status,actualAt:original[0].actualAt,updatedAt:original[0].updatedAt
+  });
+  assert.deepEqual(restoreSleepAnchors(replayed),original);
+
+  const napOriginal=[task('nap','sleep','2026-07-20T13:00:00.000Z',60),task('meal','meal','2026-07-20T14:30:00.000Z',90)];
+  const napped=applySleepAnchor(napOriginal,{type:'nap',babyId:'baby-1',startAt:'2026-07-20T13:00:00.000Z',endAt:'2026-07-20T14:00:00.000Z'});
+  assert.deepEqual(restoreSleepAnchors(napped),napOriginal);
 });
 
 test('nap completion moves the next eligible meal by the configured interval', () => {
