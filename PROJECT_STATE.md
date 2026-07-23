@@ -35,4 +35,4 @@
 - 睡眠计时区每个状态只展示一个主操作，补记睡眠作为次级入口。
 - 菜单与食谱只在展示层隐藏“·搭配数字”，并补充食材用量、主食、质地、阶段和独立状态标签。
 - Service Worker 缓存版本升级为 `baby-growth-v1-r4`。
-- 自动化验证命令为 `npm.cmd test`；本阶段最新结果为 80 项全部通过，`npm.cmd run check` 与 `git diff --check` 通过。
+- 自动化验证命令为 `npm.cmd test`；本阶段最新结果为 82 项全部通过，`npm.cmd run check` 与 `git diff --check` 通过。
