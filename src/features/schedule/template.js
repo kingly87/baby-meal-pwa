@@ -3,6 +3,7 @@ export function createDefaultTemplate(babyId) {
     id: `default-${babyId}`,
     babyId,
     name: '日常作息',
+    napToMealMinutes: 120,
     rules: [
       { type: 'wake', title: '起床', afterMinutes: 0 },
       { type: 'milk', title: '早间喝奶', afterMinutes: 20 },

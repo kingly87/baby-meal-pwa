@@ -7,6 +7,7 @@ import { onboardingView } from '../src/ui/onboarding.js';
 import { mealsView } from '../src/ui/meals.js';
 import { growthView, chartSvg } from '../src/ui/growth.js';
 import { recordsView } from '../src/ui/records.js';
+import { formatDateTimeLocal } from '../src/app.js';
 
 test('today view exposes current, next, sleep, quick actions and timeline regions', () => {
   const html=todayView({baby:{name:'柚柚'},primary:null,next:null,sleepMinutes:0,timeline:[]});
@@ -47,6 +48,22 @@ test('records screen exposes sleep lifecycle and stable record management', () =
   for(const action of ['sleep-start','sleep-end','edit-record','delete-record','edit-sleep','delete-sleep']) assert.match(html,new RegExp(`data-action="${action}"`));
 });
 
+test('sleep history labels known sleep types and preserves a fallback for legacy records', () => {
+  const html=recordsView({sleeps:[
+    {id:'night',type:'night',startAt:'2026-07-20T08:00:00Z',endAt:'2026-07-20T09:00:00Z',durationMinutes:60},
+    {id:'nap',type:'nap',startAt:'2026-07-20T10:00:00Z',endAt:'2026-07-20T11:00:00Z',durationMinutes:60},
+    {id:'legacy',startAt:'2026-07-20T12:00:00Z',endAt:'2026-07-20T13:00:00Z',durationMinutes:60}
+  ]});
+  assert.match(html,/夜间睡眠/);
+  assert.match(html,/午间小睡/);
+  assert.match(html,/睡眠记录/);
+});
+
+test('datetime-local formatter uses local date fields instead of UTC slicing', () => {
+  const localDate=new Date(2026,6,20,16,15);
+  assert.equal(formatDateTimeLocal(localDate),'2026-07-20T16:15');
+});
+
 test('records screen manages food observations and reminders after creation', () => {
   const html=recordsView({observations:[{id:'f1',name:'南瓜',observeUntil:'2026-07-22'}],reminders:[{id:'m1',title:'体检',dueDate:'2026-07-25'}]});
   for(const action of ['add-reaction','delete-observation','complete-reminder','delete-reminder']) assert.match(html,new RegExp(`data-action="${action}"`));
@@ -54,7 +71,16 @@ test('records screen manages food observations and reminders after creation', ()
 
 test('schedule editor supports enabling rules and adding a custom item', async () => {
   const app=await readFile('src/app.js','utf8');
-  for(const field of ['customTitle','customType','customAfter','enabled-']) assert.ok(app.includes(field),field);
+  for(const field of ['customTitle','customType','customAfter','enabled-','napToMealMinutes']) assert.ok(app.includes(field),field);
+});
+
+test('sleep dialogs choose a type and completed flows share schedule recalculation', async () => {
+  const app=await readFile('src/app.js','utf8');
+  assert.match(app,/name="type"[\s\S]*value="nap"[\s\S]*value="night"/);
+  assert.match(app,/async function saveSleepAndRecalculate/);
+  assert.match(app,/sleep-end[\s\S]*saveSleepAndRecalculate/);
+  assert.match(app,/edit-sleep[\s\S]*saveSleepAndRecalculate/);
+  assert.match(app,/if\(type==='sleep'\)[\s\S]*saveSleepAndRecalculate/);
 });
 
 test('growth timeline exposes filterable event types', () => {
