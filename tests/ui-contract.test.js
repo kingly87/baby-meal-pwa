@@ -12,21 +12,29 @@ import { openActionDialog } from '../src/ui/dialogs.js';
 
 function fakeDialogDocument(){
   class Node extends EventTarget{
-    constructor(){super();this.nodes=new Map();this.removed=false}
+    constructor(doc){super();this.doc=doc;this.nodes=new Map();this.removed=false}
     set innerHTML(value){
       this.html=value;
-      const title={textContent:''},cancel={onclick:null};
-      this.nodes.set('h2',title);this.nodes.set('[data-cancel]',cancel);
-      this.choices=['keep','adjust','skip'].map(value=>({dataset:{value},onclick:null,focus(){this.focused=true}}));
+      const focusable=element=>Object.assign(element,{focus(){this.focused=true;this.owner.activeElement=this}}, {owner:this.doc});
+      const title={textContent:'',id:value.match(/<h2 id="([^"]+)"/)?.[1]||''};
+      const dialog={getAttribute:name=>value.match(new RegExp(`${name}="([^"]+)"`))?.[1]||null};
+      const cancel=focusable({onclick:null});
+      this.nodes.set('h2',title);this.nodes.set('[role="dialog"]',dialog);this.nodes.set('[data-cancel]',cancel);
+      this.choices=['keep','adjust','skip'].map(value=>focusable({dataset:{value},onclick:null}));
+      this.buttons=[...this.choices,cancel];
     }
     querySelector(selector){if(selector==='[data-value]')return this.choices[0];return this.nodes.get(selector)}
-    querySelectorAll(selector){return selector==='[data-value]'?this.choices:[]}
+    querySelectorAll(selector){if(selector==='[data-value]')return this.choices;if(selector==='button:not([disabled])')return this.buttons;return[]}
     remove(){this.removed=true}
   }
-  const document=new EventTarget(),wrap=new Node();
+  const document=new EventTarget();
+  document.activeElement=null;
+  const wrap=new Node(document);
   document.createElement=()=>wrap;
   document.body={append(node){this.last=node}};
-  return{document,wrap};
+  const trigger={focus(){this.focused=true;document.activeElement=this}};
+  document.activeElement=trigger;
+  return{document,wrap,trigger};
 }
 
 test('today view exposes current, next, sleep, quick actions and timeline regions', () => {
@@ -118,6 +126,29 @@ test('task action dialog cancels from button, backdrop and Escape without leakin
     fake.wrap.querySelector('[data-cancel]').onclick();
     assert.equal(activeKeydown,0);
   }
+});
+
+test('task action dialog labels the modal, traps focus and restores the opener', async () => {
+  const fake=fakeDialogDocument();
+  let activeKeydown=0;
+  const add=fake.document.addEventListener.bind(fake.document),remove=fake.document.removeEventListener.bind(fake.document);
+  fake.document.addEventListener=(type,listener)=>{if(type==='keydown')activeKeydown++;add(type,listener)};
+  fake.document.removeEventListener=(type,listener)=>{if(type==='keydown')activeKeydown--;remove(type,listener)};
+  const promise=openActionDialog({title:'更多操作',document:fake.document});
+  const title=fake.wrap.querySelector('h2'),dialog=fake.wrap.querySelector('[role="dialog"]');
+  assert.ok(title.id);
+  assert.equal(dialog.getAttribute('aria-labelledby'),title.id);
+  assert.equal(fake.document.activeElement,fake.wrap.buttons[0]);
+  fake.wrap.buttons.at(-1).focus();
+  const tabForward=new Event('keydown');Object.defineProperties(tabForward,{key:{value:'Tab'},shiftKey:{value:false}});fake.document.dispatchEvent(tabForward);
+  assert.equal(fake.document.activeElement,fake.wrap.buttons[0]);
+  fake.wrap.buttons[0].focus();
+  const tabBackward=new Event('keydown');Object.defineProperties(tabBackward,{key:{value:'Tab'},shiftKey:{value:true}});fake.document.dispatchEvent(tabBackward);
+  assert.equal(fake.document.activeElement,fake.wrap.buttons.at(-1));
+  fake.wrap.querySelector('[data-cancel]').onclick();
+  assert.equal(await promise,null);
+  assert.equal(fake.document.activeElement,fake.trigger);
+  assert.equal(activeKeydown,0);
 });
 
 test('task action handlers are shared and obsolete top-level bindings are removed', async () => {
