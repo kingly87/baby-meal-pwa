@@ -23,6 +23,7 @@ test('night sleep completion anchors wake and cascades the following schedule', 
 
   const result = applySleepAnchor(tasks, {
     type: 'night',
+    babyId: 'baby-1',
     endAt: '2026-07-20T07:00:00.000Z'
   });
 
@@ -44,6 +45,7 @@ test('nap completion moves the next eligible meal by the configured interval', (
 
   const result = applySleepAnchor(tasks, {
     type: 'nap',
+    babyId: 'baby-1',
     startAt: '2026-07-20T13:00:00.000Z',
     endAt: '2026-07-20T14:00:00.000Z'
   });
@@ -65,7 +67,7 @@ test('completed, skipped and adjusted tasks stay locked and reset the cascade ba
     task('after-adjusted', 'milk', '2026-07-20T13:00:00.000Z', 30)
   ];
 
-  const result = applySleepAnchor(tasks, { type: 'night', endAt: '2026-07-20T07:00:00.000Z' });
+  const result = applySleepAnchor(tasks, { type: 'night', babyId: 'baby-1', endAt: '2026-07-20T07:00:00.000Z' });
 
   assert.deepEqual(result[1], tasks[1]);
   assert.equal(result[2].plannedAt, '2026-07-20T09:00:00.000Z');
@@ -82,7 +84,7 @@ test('does not mutate the input array or its task objects', () => {
   ];
   const snapshot = structuredClone(tasks);
 
-  const result = applySleepAnchor(tasks, { type: 'night', endAt: '2026-07-20T07:00:00.000Z' });
+  const result = applySleepAnchor(tasks, { type: 'night', babyId: 'baby-1', endAt: '2026-07-20T07:00:00.000Z' });
 
   assert.deepEqual(tasks, snapshot);
   assert.notStrictEqual(result, tasks);
@@ -93,9 +95,9 @@ test('does not mutate the input array or its task objects', () => {
 test('unknown sleep types, missing end times and naps without candidates return unchanged copies', () => {
   const tasks = [task('milk', 'milk', '2026-07-20T08:00:00.000Z', 20)];
   for (const sleep of [
-    { type: 'unknown', endAt: '2026-07-20T07:00:00.000Z' },
-    { type: 'night' },
-    { type: 'nap', startAt: '2026-07-20T09:00:00.000Z', endAt: '2026-07-20T10:00:00.000Z' }
+    { type: 'unknown', babyId: 'baby-1', endAt: '2026-07-20T07:00:00.000Z' },
+    { type: 'night', babyId: 'baby-1' },
+    { type: 'nap', babyId: 'baby-1', startAt: '2026-07-20T09:00:00.000Z', endAt: '2026-07-20T10:00:00.000Z' }
   ]) {
     const result = applySleepAnchor(tasks, sleep);
     assert.deepEqual(result, tasks);
@@ -112,9 +114,81 @@ test('cascade does not alter another baby or date', () => {
     task('milk', 'milk', '2026-07-20T06:50:00.000Z', 20)
   ];
 
-  const result = applySleepAnchor(tasks, { type: 'night', endAt: '2026-07-20T07:00:00.000Z' });
+  const result = applySleepAnchor(tasks, { type: 'night', babyId: 'baby-1', endAt: '2026-07-20T07:00:00.000Z' });
 
   assert.deepEqual(result[1], tasks[1]);
   assert.deepEqual(result[2], tasks[2]);
   assert.equal(result[3].plannedAt, '2026-07-20T07:20:00.000Z');
 });
+
+test('missing baby id returns an unchanged copy', () => {
+  const tasks = [
+    task('wake', 'wake', '2026-07-20T06:30:00.000Z', 0),
+    task('milk', 'milk', '2026-07-20T06:50:00.000Z', 20)
+  ];
+
+  const result = applySleepAnchor(tasks, { type: 'night', endAt: '2026-07-20T07:00:00.000Z' });
+
+  assert.deepEqual(result, tasks);
+  assert.notStrictEqual(result[0], tasks[0]);
+});
+
+test('derives the local end date and strictly isolates another date', () => {
+  const derivedDate = [
+    String(new Date('2026-07-20T07:00:00.000Z').getFullYear()),
+    String(new Date('2026-07-20T07:00:00.000Z').getMonth() + 1).padStart(2, '0'),
+    String(new Date('2026-07-20T07:00:00.000Z').getDate()).padStart(2, '0')
+  ].join('-');
+  const tasks = [
+    task('other-date-wake', 'wake', '2026-07-19T06:30:00.000Z', 0, 'upcoming', { date: '2026-07-19' }),
+    task('wake', 'wake', '2026-07-20T06:30:00.000Z', 0, 'upcoming', { date: derivedDate }),
+    task('milk', 'milk', '2026-07-20T06:50:00.000Z', 20, 'upcoming', { date: derivedDate })
+  ];
+
+  const result = applySleepAnchor(tasks, {
+    type: 'night',
+    babyId: 'baby-1',
+    endAt: '2026-07-20T07:00:00.000Z'
+  });
+
+  assert.deepEqual(result[0], tasks[0]);
+  assert.equal(result[1].actualAt, '2026-07-20T07:00:00.000Z');
+  assert.equal(result[2].plannedAt, '2026-07-20T07:20:00.000Z');
+});
+
+test('nap selects the earliest eligible meal even when tasks are unsorted', () => {
+  const tasks = [
+    task('later-meal', 'meal', '2026-07-20T17:00:00.000Z', 180),
+    task('earlier-meal', 'meal', '2026-07-20T15:00:00.000Z', 120)
+  ];
+
+  const result = applySleepAnchor(tasks, {
+    type: 'nap',
+    babyId: 'baby-1',
+    date: '2026-07-20',
+    startAt: '2026-07-20T13:00:00.000Z',
+    endAt: '2026-07-20T14:00:00.000Z'
+  });
+
+  assert.deepEqual(result[0], tasks[0]);
+  assert.equal(result[1].id, 'earlier-meal');
+  assert.equal(result[1].plannedAt, '2026-07-20T16:00:00.000Z');
+});
+
+for (const status of ['skipped', 'adjusted']) {
+  test(`night sleep does not overwrite a ${status} wake`, () => {
+    const tasks = [
+      task('wake', 'wake', '2026-07-20T06:30:00.000Z', 0, status),
+      task('milk', 'milk', '2026-07-20T06:50:00.000Z', 20)
+    ];
+
+    const result = applySleepAnchor(tasks, {
+      type: 'night',
+      babyId: 'baby-1',
+      date: '2026-07-20',
+      endAt: '2026-07-20T07:00:00.000Z'
+    });
+
+    assert.deepEqual(result, tasks);
+  });
+}

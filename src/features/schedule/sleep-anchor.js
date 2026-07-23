@@ -1,4 +1,4 @@
-import { addMinutes } from '../../core/dates.js';
+import { addMinutes, localDateKey } from '../../core/dates.js';
 
 const LOCKED_STATUSES = new Set(['completed', 'skipped', 'adjusted']);
 
@@ -6,9 +6,8 @@ function copyTasks(tasks) {
   return tasks.map(task => ({ ...task }));
 }
 
-function matchesSleepScope(task, sleep) {
-  return (!sleep.babyId || task.babyId === sleep.babyId)
-    && (!sleep.date || task.date === sleep.date);
+function matchesSleepScope(task, babyId, date) {
+  return task.babyId === babyId && task.date === date;
 }
 
 function cascade(tasks, startIndex, base, anchorAt) {
@@ -28,11 +27,15 @@ function cascade(tasks, startIndex, base, anchorAt) {
 
 export function applySleepAnchor(tasks, sleep, { napToMealMinutes = 120 } = {}) {
   const result = copyTasks(tasks);
-  if (!sleep?.endAt || !['night', 'nap'].includes(sleep.type)) return result;
+  if (!sleep?.babyId || !sleep.endAt || !['night', 'nap'].includes(sleep.type)) return result;
+  const date = sleep.date || localDateKey(new Date(sleep.endAt));
 
   if (sleep.type === 'night') {
-    const wakeIndex = result.findIndex(task => task.type === 'wake' && matchesSleepScope(task, sleep));
+    const wakeIndex = result.findIndex(task =>
+      task.type === 'wake' && matchesSleepScope(task, sleep.babyId, date)
+    );
     if (wakeIndex < 0) return result;
+    if (['skipped', 'adjusted'].includes(result[wakeIndex].status)) return result;
     result[wakeIndex] = {
       ...result[wakeIndex],
       status: 'completed',
@@ -45,12 +48,19 @@ export function applySleepAnchor(tasks, sleep, { napToMealMinutes = 120 } = {}) 
 
   const sleepStart = sleep.startAt || sleep.endAt;
   const startTime = new Date(sleepStart).getTime();
-  const mealIndex = result.findIndex(task =>
-    task.type === 'meal'
-    && !LOCKED_STATUSES.has(task.status)
-    && matchesSleepScope(task, sleep)
-    && new Date(task.plannedAt).getTime() >= startTime
-  );
+  const meal = result
+    .filter(task =>
+      task.type === 'meal'
+      && !LOCKED_STATUSES.has(task.status)
+      && matchesSleepScope(task, sleep.babyId, date)
+      && new Date(task.plannedAt).getTime() >= startTime
+    )
+    .reduce((earliest, task) =>
+      !earliest || new Date(task.plannedAt).getTime() < new Date(earliest.plannedAt).getTime()
+        ? task
+        : earliest
+    , null);
+  const mealIndex = meal ? result.findIndex(task => task.id === meal.id) : -1;
   if (mealIndex < 0) return result;
 
   const plannedAt = addMinutes(sleep.endAt, napToMealMinutes);
