@@ -170,9 +170,83 @@ test('nap selects the earliest eligible meal even when tasks are unsorted', () =
     endAt: '2026-07-20T14:00:00.000Z'
   });
 
-  assert.deepEqual(result[0], tasks[0]);
+  assert.equal(result[0].plannedAt, '2026-07-20T19:00:00.000Z');
   assert.equal(result[1].id, 'earlier-meal');
   assert.equal(result[1].plannedAt, '2026-07-20T16:00:00.000Z');
+});
+
+test('night cascades through logical rule order while preserving physical array order', () => {
+  const tasks = [
+    task('meal', 'meal', '2026-07-20T09:00:00.000Z', 120, 'upcoming', { ruleIndex: 2 }),
+    task('wake', 'wake', '2026-07-20T06:30:00.000Z', 0, 'upcoming', { ruleIndex: 0 }),
+    task('milk', 'milk', '2026-07-20T06:50:00.000Z', 20, 'upcoming', { ruleIndex: 1 })
+  ];
+
+  const result = applySleepAnchor(tasks, {
+    type: 'night',
+    babyId: 'baby-1',
+    date: '2026-07-20',
+    endAt: '2026-07-20T07:00:00.000Z'
+  });
+
+  assert.deepEqual(result.map(item => item.id), ['meal', 'wake', 'milk']);
+  assert.equal(result[1].actualAt, '2026-07-20T07:00:00.000Z');
+  assert.equal(result[2].plannedAt, '2026-07-20T07:20:00.000Z');
+  assert.equal(result[0].plannedAt, '2026-07-20T09:20:00.000Z');
+});
+
+test('night selects the logically earliest wake when several exist', () => {
+  const tasks = [
+    task('late-wake', 'wake', '2026-07-20T08:00:00.000Z', 60, 'upcoming', { ruleIndex: 3 }),
+    task('milk', 'milk', '2026-07-20T06:50:00.000Z', 20, 'upcoming', { ruleIndex: 1 }),
+    task('early-wake', 'wake', '2026-07-20T06:30:00.000Z', 0, 'upcoming', { ruleIndex: 0 })
+  ];
+
+  const result = applySleepAnchor(tasks, {
+    type: 'night',
+    babyId: 'baby-1',
+    date: '2026-07-20',
+    endAt: '2026-07-20T07:00:00.000Z'
+  });
+
+  assert.equal(result[2].status, 'completed');
+  assert.equal(result[2].actualAt, '2026-07-20T07:00:00.000Z');
+  assert.notEqual(result[0].actualAt, '2026-07-20T07:00:00.000Z');
+});
+
+test('nap writes back by entry index when duplicate ids exist across scopes', () => {
+  const tasks = [
+    task('duplicate', 'meal', '2026-07-20T15:00:00.000Z', 120, 'upcoming', { babyId: 'baby-2' }),
+    task('duplicate', 'meal', '2026-07-20T15:30:00.000Z', 120)
+  ];
+
+  const result = applySleepAnchor(tasks, {
+    type: 'nap',
+    babyId: 'baby-1',
+    date: '2026-07-20',
+    startAt: '2026-07-20T13:00:00.000Z',
+    endAt: '2026-07-20T14:00:00.000Z'
+  });
+
+  assert.deepEqual(result[0], tasks[0]);
+  assert.equal(result[1].plannedAt, '2026-07-20T16:00:00.000Z');
+});
+
+test('invalid sleep times and nap intervals return unchanged copies without throwing', () => {
+  const tasks = [task('meal', 'meal', '2026-07-20T15:00:00.000Z', 120)];
+  const cases = [
+    [{ type: 'night', babyId: 'baby-1', date: '2026-07-20', endAt: 'invalid' }, undefined],
+    [{ type: 'nap', babyId: 'baby-1', date: '2026-07-20', startAt: 'invalid', endAt: '2026-07-20T14:00:00.000Z' }, undefined],
+    [{ type: 'nap', babyId: 'baby-1', date: '2026-07-20', startAt: '2026-07-20T13:00:00.000Z', endAt: '2026-07-20T14:00:00.000Z' }, { napToMealMinutes: Number.NaN }],
+    [{ type: 'nap', babyId: 'baby-1', date: '2026-07-20', startAt: '2026-07-20T13:00:00.000Z', endAt: '2026-07-20T14:00:00.000Z' }, { napToMealMinutes: -1 }]
+  ];
+
+  for (const [sleep, options] of cases) {
+    let result;
+    assert.doesNotThrow(() => { result = applySleepAnchor(tasks, sleep, options); });
+    assert.deepEqual(result, tasks);
+    assert.notStrictEqual(result[0], tasks[0]);
+  }
 });
 
 for (const status of ['skipped', 'adjusted']) {

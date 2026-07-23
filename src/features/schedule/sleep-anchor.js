@@ -10,11 +10,27 @@ function matchesSleepScope(task, babyId, date) {
   return task.babyId === babyId && task.date === date;
 }
 
-function cascade(tasks, startIndex, base, anchorAt) {
-  const { babyId, date } = tasks[startIndex];
-  for (let index = startIndex + 1; index < tasks.length; index++) {
+function compareEntries(left, right) {
+  const leftRule = Number.isFinite(left.task.ruleIndex);
+  const rightRule = Number.isFinite(right.task.ruleIndex);
+  if (leftRule !== rightRule) return leftRule ? -1 : 1;
+  if (leftRule && left.task.ruleIndex !== right.task.ruleIndex) {
+    return left.task.ruleIndex - right.task.ruleIndex;
+  }
+  return new Date(left.task.plannedAt).getTime() - new Date(right.task.plannedAt).getTime();
+}
+
+function scopedEntries(tasks, babyId, date) {
+  return tasks
+    .map((task, index) => ({ task, index }))
+    .filter(entry => matchesSleepScope(entry.task, babyId, date))
+    .sort(compareEntries);
+}
+
+function cascade(tasks, entries, startIndex, base, anchorAt) {
+  for (let cursor = startIndex + 1; cursor < entries.length; cursor++) {
+    const { index } = entries[cursor];
     const task = tasks[index];
-    if (task.babyId !== babyId || task.date !== date) continue;
     if (LOCKED_STATUSES.has(task.status)) {
       base = task.actualAt || task.plannedAt;
       continue;
@@ -28,13 +44,17 @@ function cascade(tasks, startIndex, base, anchorAt) {
 export function applySleepAnchor(tasks, sleep, { napToMealMinutes = 120 } = {}) {
   const result = copyTasks(tasks);
   if (!sleep?.babyId || !sleep.endAt || !['night', 'nap'].includes(sleep.type)) return result;
+  if (!Number.isFinite(napToMealMinutes) || napToMealMinutes < 0) return result;
+  const endTime = new Date(sleep.endAt).getTime();
+  if (!Number.isFinite(endTime)) return result;
+  if (sleep.type === 'nap' && sleep.startAt && !Number.isFinite(new Date(sleep.startAt).getTime())) return result;
   const date = sleep.date || localDateKey(new Date(sleep.endAt));
+  const entries = scopedEntries(result, sleep.babyId, date);
 
   if (sleep.type === 'night') {
-    const wakeIndex = result.findIndex(task =>
-      task.type === 'wake' && matchesSleepScope(task, sleep.babyId, date)
-    );
-    if (wakeIndex < 0) return result;
+    const wakePosition = entries.findIndex(entry => entry.task.type === 'wake');
+    if (wakePosition < 0) return result;
+    const wakeIndex = entries[wakePosition].index;
     if (['skipped', 'adjusted'].includes(result[wakeIndex].status)) return result;
     result[wakeIndex] = {
       ...result[wakeIndex],
@@ -42,34 +62,33 @@ export function applySleepAnchor(tasks, sleep, { napToMealMinutes = 120 } = {}) 
       actualAt: sleep.endAt,
       updatedAt: sleep.endAt
     };
-    cascade(result, wakeIndex, sleep.endAt, sleep.endAt);
+    cascade(result, entries, wakePosition, sleep.endAt, sleep.endAt);
     return result;
   }
 
   const sleepStart = sleep.startAt || sleep.endAt;
   const startTime = new Date(sleepStart).getTime();
-  const meal = result
-    .filter(task =>
-      task.type === 'meal'
-      && !LOCKED_STATUSES.has(task.status)
-      && matchesSleepScope(task, sleep.babyId, date)
-      && new Date(task.plannedAt).getTime() >= startTime
+  const mealEntry = entries
+    .filter(entry =>
+      entry.task.type === 'meal'
+      && !LOCKED_STATUSES.has(entry.task.status)
+      && new Date(entry.task.plannedAt).getTime() >= startTime
     )
-    .reduce((earliest, task) =>
-      !earliest || new Date(task.plannedAt).getTime() < new Date(earliest.plannedAt).getTime()
-        ? task
+    .reduce((earliest, entry) =>
+      !earliest || new Date(entry.task.plannedAt).getTime() < new Date(earliest.task.plannedAt).getTime()
+        ? entry
         : earliest
     , null);
-  const mealIndex = meal ? result.findIndex(task => task.id === meal.id) : -1;
-  if (mealIndex < 0) return result;
+  if (!mealEntry) return result;
 
   const plannedAt = addMinutes(sleep.endAt, napToMealMinutes);
+  const mealIndex = mealEntry.index;
   result[mealIndex] = {
     ...result[mealIndex],
     plannedAt,
     status: 'upcoming',
     updatedAt: sleep.endAt
   };
-  cascade(result, mealIndex, plannedAt, sleep.endAt);
+  cascade(result, entries, entries.indexOf(mealEntry), plannedAt, sleep.endAt);
   return result;
 }
