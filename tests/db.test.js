@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { STORE_NAMES, SCHEMA_VERSION } from '../src/core/schema.js';
-import { MemoryRepository } from '../src/db.js';
+import { MemoryRepository, IndexedDbRepository } from '../src/db.js';
 
 test('schema exposes all V1 stores', () => {
   assert.equal(SCHEMA_VERSION, 1);
@@ -25,4 +25,8 @@ test('repository transaction rolls back on failure and clear removes all data', 
   assert.deepEqual((await repo.list('babies')).map(x => x.id), ['b1']);
   await repo.clearAll();
   assert.equal((await repo.list('babies')).length, 0);
+});
+
+test('indexed repository exposes the same transaction workflow API', () => {
+  assert.equal(typeof IndexedDbRepository.prototype.transaction,'function');
 });

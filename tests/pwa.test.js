@@ -19,6 +19,7 @@ test('manifest identifies installable V1 with 192 and 512 icons', async () => {
 
 test('service worker has safe caching, navigation fallback and controlled updates', async () => {
   const sw=await readFile('service-worker.js','utf8');
+  assert.ok(sw.includes("const CACHE_NAME='baby-growth-v1-20260720-r4'"));
   for(const token of ['response.ok','request.mode === \'navigate\'','SKIP_WAITING','caches.delete','notificationclick','showNotification']) assert.ok(sw.includes(token),token);
   const appFiles=['./','./index.html','./assets/styles/app.css','./data/recipes.js','./src/app.js','./manifest.webmanifest'];
   for(const file of appFiles) assert.ok(sw.includes(JSON.stringify(file)),file);

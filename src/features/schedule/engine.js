@@ -1,6 +1,8 @@
 import { addMinutes } from '../../core/dates.js';
 import { validateTemplate } from './template.js';
 
+function withoutSleepAnchorBaseline(task){const{sleepAnchorBaseline,...rest}=task;return rest}
+
 export function generateTasks({ babyId, date, wakeAt, template, createId }) {
   validateTemplate(template);
   if (template.babyId !== babyId) throw new Error('作息模板不属于当前宝宝');
@@ -17,17 +19,19 @@ export function completeTask(tasks, id, actualAt, { cascade = true, nextPlannedA
   const result = tasks.map(task => ({ ...task }));
   const index = result.findIndex(task => task.id === id);
   if (index < 0) throw new Error('找不到要完成的事项');
-  result[index] = { ...result[index], status: 'completed', actualAt, updatedAt: actualAt };
+  result[index] = { ...withoutSleepAnchorBaseline(result[index]), status: 'completed', actualAt, updatedAt: actualAt };
   if (!cascade || index === result.length - 1) return result;
   let base = actualAt;
   for (let cursor = index + 1; cursor < result.length; cursor++) {
     if (['completed', 'skipped'].includes(result[cursor].status)) { base = result[cursor].actualAt || result[cursor].plannedAt; continue; }
     const plannedAt = cursor === index + 1 && nextPlannedAt ? nextPlannedAt : addMinutes(base, result[cursor].afterMinutes);
-    result[cursor] = { ...result[cursor], plannedAt, status: cursor === index + 1 && nextPlannedAt ? 'adjusted' : 'upcoming', updatedAt: actualAt };
+    const manuallyAdjusted=cursor===index+1&&nextPlannedAt;
+    result[cursor] = { ...(manuallyAdjusted?withoutSleepAnchorBaseline(result[cursor]):result[cursor]), plannedAt, status: manuallyAdjusted ? 'adjusted' : 'upcoming', updatedAt: actualAt };
     base = plannedAt;
   }
   return result;
 }
 
-export function skipTask(tasks, id, at = new Date().toISOString()) { return tasks.map(task => task.id === id ? { ...task, status: 'skipped', actualAt: at, updatedAt: at } : { ...task }); }
+export function skipTask(tasks, id, at = new Date().toISOString()) { return tasks.map(task => task.id === id ? { ...withoutSleepAnchorBaseline(task), status: 'skipped', actualAt: at, updatedAt: at } : { ...task }); }
+export function adjustTask(task,plannedAt,updatedAt=new Date().toISOString()){return{...withoutSleepAnchorBaseline(task),plannedAt,status:'adjusted',updatedAt}}
 export function updateOverdue(tasks, now) { const time = new Date(now).getTime(); return tasks.map(task => ['upcoming','current','adjusted'].includes(task.status) && new Date(task.plannedAt).getTime() < time ? { ...task, status: 'overdue', updatedAt: now } : { ...task }); }

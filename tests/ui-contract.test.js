@@ -7,15 +7,46 @@ import { onboardingView } from '../src/ui/onboarding.js';
 import { mealsView } from '../src/ui/meals.js';
 import { growthView, chartSvg } from '../src/ui/growth.js';
 import { recordsView } from '../src/ui/records.js';
+import { formatDateTimeLocal } from '../src/app.js';
+import { openActionDialog } from '../src/ui/dialogs.js';
+
+function fakeDialogDocument(){
+  class Node extends EventTarget{
+    constructor(doc){super();this.doc=doc;this.nodes=new Map();this.removed=false}
+    set innerHTML(value){
+      this.html=value;
+      const focusable=element=>Object.assign(element,{focus(){this.focused=true;this.owner.activeElement=this}}, {owner:this.doc});
+      const title={textContent:'',id:value.match(/<h2 id="([^"]+)"/)?.[1]||''};
+      const dialog={getAttribute:name=>value.match(new RegExp(`${name}="([^"]+)"`))?.[1]||null};
+      const cancel=focusable({onclick:null});
+      this.nodes.set('h2',title);this.nodes.set('[role="dialog"]',dialog);this.nodes.set('[data-cancel]',cancel);
+      this.choices=['keep','adjust','skip'].map(value=>focusable({dataset:{value},onclick:null}));
+      this.buttons=[...this.choices,cancel];
+    }
+    querySelector(selector){if(selector==='[data-value]')return this.choices[0];return this.nodes.get(selector)}
+    querySelectorAll(selector){if(selector==='[data-value]')return this.choices;if(selector==='button:not([disabled])')return this.buttons;return[]}
+    remove(){this.removed=true}
+  }
+  const document=new EventTarget();
+  document.activeElement=null;
+  const wrap=new Node(document);
+  document.createElement=()=>wrap;
+  document.body={append(node){this.last=node}};
+  const trigger={focus(){this.focused=true;document.activeElement=this}};
+  document.activeElement=trigger;
+  return{document,wrap,trigger};
+}
 
 test('today view exposes current, next, sleep, quick actions and timeline regions', () => {
   const html=todayView({baby:{name:'柚柚'},primary:null,next:null,sleepMinutes:0,timeline:[]});
   for(const id of ['current-task-card','next-task-card','sleep-summary','quick-actions','today-timeline']) assert.match(html,new RegExp(`id="${id}"`));
 });
 
-test('today task offers cascade, keep-later and manual adjustment controls', () => {
+test('today task exposes only complete and more as top-level actions', () => {
   const html=todayView({baby:{name:'柚柚'},primary:{id:'t1',title:'辅食',type:'meal',status:'upcoming',plannedAt:'2026-07-20T10:00:00Z'},next:null,sleepMinutes:0,timeline:[]});
-  for(const action of ['complete-task','complete-task-keep','adjust-task']) assert.match(html,new RegExp(`data-action="${action}"`));
+  assert.equal((html.match(/data-action=/g)||[]).length,2);
+  for(const action of ['complete-task','task-more']) assert.match(html,new RegExp(`data-action="${action}"`));
+  for(const action of ['complete-task-keep','adjust-task','skip-task']) assert.doesNotMatch(html,new RegExp(`data-action="${action}"`));
 });
 
 test('onboarding contains labeled baby, birthday, stage and privacy fields', () => {
@@ -42,9 +73,104 @@ test('meal and growth screens expose shopping, preferences and tooth actions', (
   assert.match(chartSvg({ready:true,min:8,max:9,points:[{x:0,y:1,value:8,date:'2026-07-20'},{x:1,y:0,value:9,date:'2026-07-21'}]}),/<polyline/);
 });
 
-test('records screen exposes sleep lifecycle and stable record management', () => {
+test('records screen preserves stable record management controls', () => {
   const html=recordsView({records:[{id:'r1',type:'milk',value:120,occurredAt:'2026-07-20T08:00:00Z'}],sleeps:[{id:'s1',startAt:'2026-07-20T08:00:00Z',endAt:'2026-07-20T09:00:00Z',durationMinutes:60}]});
-  for(const action of ['sleep-start','sleep-end','edit-record','delete-record','edit-sleep','delete-sleep']) assert.match(html,new RegExp(`data-action="${action}"`));
+  for(const action of ['edit-record','delete-record','edit-sleep','delete-sleep']) assert.match(html,new RegExp(`data-action="${action}"`));
+});
+
+test('records screen shows one sleep lifecycle action for each timer state', () => {
+  const inactive=recordsView({sleeps:[]});
+  assert.match(inactive,/data-action="sleep-start"/);
+  assert.doesNotMatch(inactive,/data-action="sleep-end"/);
+  assert.match(inactive,/data-record="sleep"/);
+  const active=recordsView({sleeps:[{id:'s1',startAt:new Date(Date.now()-10*60_000).toISOString()}]});
+  assert.match(active,/data-action="sleep-end"/);
+  assert.doesNotMatch(active,/data-action="sleep-start"/);
+  assert.match(active,/data-record="sleep"/);
+});
+
+test('mobile task and sleep controls use responsive full-size layouts', async () => {
+  const css=await readFile('assets/styles/app.css','utf8');
+  assert.match(css,/\.hero-actions\s*\{[^}]*grid-template-columns\s*:\s*1fr\s+104px[^}]*\}/s);
+  assert.match(css,/\.hero-actions\s+button\s*\{[^}]*min-height\s*:\s*48px[^}]*\}/s);
+  assert.match(css,/\.hero-actions\s+button\s*\{[^}]*white-space\s*:\s*nowrap[^}]*\}/s);
+  assert.match(css,/\.action-list\s+button\s*\{[^}]*white-space\s*:\s*nowrap[^}]*\}/s);
+  assert.match(css,/\.sleep-main-action\s*\{[^}]*width\s*:\s*100%[^}]*min-height\s*:\s*50px[^}]*\}/s);
+  assert.match(css,/@media\s*\(max-width\s*:\s*380px\)\s*\{[^}]*\.hero-actions\s*\{[^}]*grid-template-columns\s*:\s*1fr/s);
+});
+
+test('task action dialog resolves every explicit choice and cleans up', async () => {
+  for(const choice of ['keep','adjust','skip']){
+    const fake=fakeDialogDocument(),promise=openActionDialog({title:'<更多>',document:fake.document});
+    assert.equal(fake.wrap.querySelector('h2').textContent,'<更多>');
+    fake.wrap.choices.find(button=>button.dataset.value===choice).onclick();
+    assert.equal(await promise,choice);
+    assert.equal(fake.wrap.removed,true);
+  }
+});
+
+test('task action dialog cancels from button, backdrop and Escape without leaking listeners', async () => {
+  for(const cancel of ['button','backdrop','escape']){
+    const fake=fakeDialogDocument();
+    let activeKeydown=0;
+    const add=fake.document.addEventListener.bind(fake.document),remove=fake.document.removeEventListener.bind(fake.document);
+    fake.document.addEventListener=(type,listener)=>{if(type==='keydown')activeKeydown++;add(type,listener)};
+    fake.document.removeEventListener=(type,listener)=>{if(type==='keydown')activeKeydown--;remove(type,listener)};
+    const promise=openActionDialog({title:'更多',document:fake.document});
+    if(cancel==='button')fake.wrap.querySelector('[data-cancel]').onclick();
+    if(cancel==='backdrop')fake.wrap.dispatchEvent(new Event('click'));
+    if(cancel==='escape'){const event=new Event('keydown');Object.defineProperty(event,'key',{value:'Escape'});fake.document.dispatchEvent(event)}
+    assert.equal(await promise,null);
+    assert.equal(fake.wrap.removed,true);
+    assert.equal(activeKeydown,0);
+    fake.wrap.querySelector('[data-cancel]').onclick();
+    assert.equal(activeKeydown,0);
+  }
+});
+
+test('task action dialog labels the modal, traps focus and restores the opener', async () => {
+  const fake=fakeDialogDocument();
+  let activeKeydown=0;
+  const add=fake.document.addEventListener.bind(fake.document),remove=fake.document.removeEventListener.bind(fake.document);
+  fake.document.addEventListener=(type,listener)=>{if(type==='keydown')activeKeydown++;add(type,listener)};
+  fake.document.removeEventListener=(type,listener)=>{if(type==='keydown')activeKeydown--;remove(type,listener)};
+  const promise=openActionDialog({title:'更多操作',document:fake.document});
+  const title=fake.wrap.querySelector('h2'),dialog=fake.wrap.querySelector('[role="dialog"]');
+  assert.ok(title.id);
+  assert.equal(dialog.getAttribute('aria-labelledby'),title.id);
+  assert.equal(fake.document.activeElement,fake.wrap.buttons[0]);
+  fake.wrap.buttons.at(-1).focus();
+  const tabForward=new Event('keydown');Object.defineProperties(tabForward,{key:{value:'Tab'},shiftKey:{value:false}});fake.document.dispatchEvent(tabForward);
+  assert.equal(fake.document.activeElement,fake.wrap.buttons[0]);
+  fake.wrap.buttons[0].focus();
+  const tabBackward=new Event('keydown');Object.defineProperties(tabBackward,{key:{value:'Tab'},shiftKey:{value:true}});fake.document.dispatchEvent(tabBackward);
+  assert.equal(fake.document.activeElement,fake.wrap.buttons.at(-1));
+  fake.wrap.querySelector('[data-cancel]').onclick();
+  assert.equal(await promise,null);
+  assert.equal(fake.document.activeElement,fake.trigger);
+  assert.equal(activeKeydown,0);
+});
+
+test('task action handlers are shared and obsolete top-level bindings are removed', async () => {
+  const app=await readFile('src/app.js','utf8');
+  for(const name of ['handleCompleteKeep','handleAdjustTask','handleSkipTask']) assert.match(app,new RegExp(`function ${name}\\(`));
+  for(const action of ['complete-task-keep','adjust-task','skip-task']) assert.doesNotMatch(app,new RegExp(`querySelectorAll\\('\\[data-action="${action}"\\]'\\)`));
+});
+
+test('sleep history labels known sleep types and preserves a fallback for legacy records', () => {
+  const html=recordsView({sleeps:[
+    {id:'night',type:'night',startAt:'2026-07-20T08:00:00Z',endAt:'2026-07-20T09:00:00Z',durationMinutes:60},
+    {id:'nap',type:'nap',startAt:'2026-07-20T10:00:00Z',endAt:'2026-07-20T11:00:00Z',durationMinutes:60},
+    {id:'legacy',startAt:'2026-07-20T12:00:00Z',endAt:'2026-07-20T13:00:00Z',durationMinutes:60}
+  ]});
+  assert.match(html,/夜间睡眠/);
+  assert.match(html,/午间小睡/);
+  assert.match(html,/睡眠记录/);
+});
+
+test('datetime-local formatter uses local date fields instead of UTC slicing', () => {
+  const localDate=new Date(2026,6,20,16,15);
+  assert.equal(formatDateTimeLocal(localDate),'2026-07-20T16:15');
 });
 
 test('records screen manages food observations and reminders after creation', () => {
@@ -54,7 +180,16 @@ test('records screen manages food observations and reminders after creation', ()
 
 test('schedule editor supports enabling rules and adding a custom item', async () => {
   const app=await readFile('src/app.js','utf8');
-  for(const field of ['customTitle','customType','customAfter','enabled-']) assert.ok(app.includes(field),field);
+  for(const field of ['customTitle','customType','customAfter','enabled-','napToMealMinutes']) assert.ok(app.includes(field),field);
+});
+
+test('sleep dialogs choose a type and completed flows share schedule recalculation', async () => {
+  const app=await readFile('src/app.js','utf8');
+  assert.match(app,/name="type"[\s\S]*value="nap"[\s\S]*value="night"/);
+  assert.match(app,/async function saveSleepAndRecalculate/);
+  assert.match(app,/sleep-end[\s\S]*saveSleepAndRecalculate/);
+  assert.match(app,/edit-sleep[\s\S]*saveSleepAndRecalculate/);
+  assert.match(app,/if\(type==='sleep'\)[\s\S]*saveSleepAndRecalculate/);
 });
 
 test('growth timeline exposes filterable event types', () => {

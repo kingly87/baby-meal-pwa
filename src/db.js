@@ -42,6 +42,18 @@ export class IndexedDbRepository {
   async list(store, query = {}) { assertStore(store); const db = await this.open(); const values = await requestResult(db.transaction(store).objectStore(store).getAll()); return values.filter(item => !query.babyId || item.babyId === query.babyId).map(clone); }
   async delete(store, id) { assertStore(store); const db = await this.open(); const tx = db.transaction(store, 'readwrite'); tx.objectStore(store).delete(id); await transactionDone(tx); return true; }
   async clear(store) { assertStore(store); const db = await this.open(); const tx = db.transaction(store, 'readwrite'); tx.objectStore(store).clear(); await transactionDone(tx); }
+  async transaction(stores,callback){
+    stores.forEach(assertStore);
+    const db=await this.open(),transaction=db.transaction(stores,'readwrite'),done=transactionDone(transaction);
+    const facade={
+      put:async(store,value)=>{assertStore(store);if(!value?.id)throw new Error('记录缺少 id');await requestResult(transaction.objectStore(store).put(clone(value)));return clone(value)},
+      get:async(store,id)=>{assertStore(store);return clone(await requestResult(transaction.objectStore(store).get(id)))},
+      list:async(store,query={})=>{assertStore(store);const values=await requestResult(transaction.objectStore(store).getAll());return values.filter(item=>!query.babyId||item.babyId===query.babyId).map(clone)},
+      delete:async(store,id)=>{assertStore(store);await requestResult(transaction.objectStore(store).delete(id));return true},
+      clear:async store=>{assertStore(store);await requestResult(transaction.objectStore(store).clear())}
+    };
+    try{const result=await callback(facade);await done;return result}catch(error){try{transaction.abort()}catch{}await done.catch(()=>{});throw error}
+  }
   async clearAll() { const db = await this.open(); const tx = db.transaction(STORE_NAMES, 'readwrite'); for (const store of STORE_NAMES) tx.objectStore(store).clear(); await transactionDone(tx); }
   async exportAll() { return Object.fromEntries(await Promise.all(STORE_NAMES.map(async name => [name, await this.list(name)]))); }
   async replaceAll(data) { const db = await this.open(); const tx = db.transaction(STORE_NAMES, 'readwrite'); for (const name of STORE_NAMES) { const store = tx.objectStore(name); store.clear(); for (const item of data[name] || []) store.put(clone(item)); } await transactionDone(tx); }
