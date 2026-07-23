@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { MemoryRepository } from '../src/db.js';
-import { loadApplicationModel, ensureDailySchedule } from '../src/app.js';
+import { loadApplicationModel, ensureDailySchedule, recalculateScheduleForSleep } from '../src/app.js';
 import { createDefaultTemplate } from '../src/features/schedule/template.js';
 
 test('startup requests onboarding when there is no baby', async () => {
@@ -21,4 +21,32 @@ test('startup loads active baby and only today scoped tasks', async () => {
   const repo=new MemoryRepository({babies:[{id:'b1',name:'柚柚'}],appSettings:[{id:'global',activeBabyId:'b1'}],taskInstances:[{id:'old',babyId:'b1',date:'2026-07-19',status:'overdue',plannedAt:'2026-07-19T10:00:00Z'},{id:'t2',babyId:'b1',date:'2026-07-20',status:'upcoming',plannedAt:'2026-07-20T12:00:00Z'},{id:'t1',babyId:'b1',date:'2026-07-20',status:'upcoming',plannedAt:'2026-07-20T10:00:00Z'}]});
   const model=await loadApplicationModel(repo,{now:()=>new Date(2026,6,20,12)});
   assert.equal(model.store.activeBaby.name,'柚柚'); assert.deepEqual(model.store.tasks.map(task=>task.id),['t1','t2']);
+});
+
+test('completed historical sleep recalculates its target day while isolating dates and babies', async () => {
+  const base={actualAt:null,status:'upcoming',updatedAt:'2026-07-20T00:00:00.000Z'};
+  const repo=new MemoryRepository({
+    scheduleTemplates:[
+      {...createDefaultTemplate('b1'),id:'template-b1',napToMealMinutes:90},
+      {...createDefaultTemplate('b2'),id:'template-b2'}
+    ],
+    taskInstances:[
+      {...base,id:'wake-target',babyId:'b1',date:'2026-07-20',type:'wake',plannedAt:'2026-07-20T08:00:00.000Z',afterMinutes:0},
+      {...base,id:'milk-target',babyId:'b1',date:'2026-07-20',type:'milk',plannedAt:'2026-07-20T08:20:00.000Z',afterMinutes:20},
+      {...base,id:'milk-other-date',babyId:'b1',date:'2026-07-21',type:'milk',plannedAt:'2026-07-21T08:20:00.000Z',afterMinutes:20},
+      {...base,id:'milk-other-baby',babyId:'b2',date:'2026-07-20',type:'milk',plannedAt:'2026-07-20T08:20:00.000Z',afterMinutes:20}
+    ]
+  });
+
+  await recalculateScheduleForSleep(repo,{
+    id:'sleep-history',
+    babyId:'b1',
+    type:'night',
+    startAt:'2026-07-19T23:00:00.000Z',
+    endAt:'2026-07-20T07:00:00.000Z'
+  });
+
+  assert.equal((await repo.get('taskInstances','milk-target')).plannedAt,'2026-07-20T07:20:00.000Z');
+  assert.equal((await repo.get('taskInstances','milk-other-date')).plannedAt,'2026-07-21T08:20:00.000Z');
+  assert.equal((await repo.get('taskInstances','milk-other-baby')).plannedAt,'2026-07-20T08:20:00.000Z');
 });
