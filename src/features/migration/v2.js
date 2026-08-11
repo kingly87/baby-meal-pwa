@@ -13,9 +13,11 @@ export async function auditAndMarkV2(repository,now=()=>new Date().toISOString()
     for(const store of BABY_SCOPED_STORES){
       if(data[store].length) throw new Error(`${store} 引用了不存在的宝宝`);
     }
-    const global=data.appSettings.find(item=>item.id==='global');
-    if(global?.activeBabyId) throw new Error('当前宝宝设置无效');
-    parseAndValidateBackup({...backup,data:{...data,babies:[{id:'v2-empty-audit',name:'空数据库校验'}]}});
+    if(data.appSettings.some(item=>item.activeBabyId)) throw new Error('当前宝宝设置无效');
+    const occupiedIds=new Set(STORE_NAMES.flatMap(store=>data[store].map(item=>item.id)));
+    let auditBabyId='v2-empty-audit';
+    while(occupiedIds.has(auditBabyId)) auditBabyId=`${auditBabyId}-next`;
+    parseAndValidateBackup({...backup,data:{...data,babies:[{id:auditBabyId,name:'空数据库校验'}]}});
   }
 
   const recordCount=STORE_NAMES.reduce((sum,store)=>sum+data[store].length,0);

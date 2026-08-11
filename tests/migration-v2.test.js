@@ -51,6 +51,15 @@ test('rejects a global activeBabyId that does not identify an existing baby', as
   assert.deepEqual(await repo.get('appSettings','global'),settings);
 });
 
+test('empty audit rejects activeBabyId in secondary settings without creating global settings', async () => {
+  const settings={id:'secondary',activeBabyId:'v2-empty-audit',dataVersion:1,theme:'warm'};
+  const repo=new MemoryRepository({appSettings:[settings]});
+
+  await assert.rejects(auditAndMarkV2(repo),/当前宝宝设置无效/);
+  assert.deepEqual(await repo.get('appSettings','secondary'),settings);
+  assert.equal(await repo.get('appSettings','global'),undefined);
+});
+
 test('preserves existing global application setting fields when marking V2', async () => {
   const repo=new MemoryRepository({
     babies:[{id:'b1',name:'多米'}],
