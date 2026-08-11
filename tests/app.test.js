@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { MemoryRepository } from '../src/db.js';
-import { loadApplicationModel, bindOnboardingActions, ensureDailySchedule, recalculateScheduleForSleep, loadDailyTrend, createTrendState, loadRenderData, runRefreshCycle } from '../src/app.js';
+import { loadApplicationModel, bindOnboardingActions, ensureDailySchedule, recalculateScheduleForSleep, loadDailyTrend, createTrendState, loadRenderData, runRefreshCycle, createRefreshCoordinator, syncNotifiedTasks } from '../src/app.js';
 import { createDefaultTemplate } from '../src/features/schedule/template.js';
 import { createBackup } from '../src/features/backup/backup.js';
 import { AppStore } from '../src/store.js';
@@ -269,4 +269,31 @@ test('real refresh cycle shares settings and reminders with enabled notification
   for(const[name,count]of counts)assert.ok(count<=1,`${name} read ${count} times`);
   assert.equal(counts.get('appSettings'),1);
   assert.equal(counts.get('reminders'),1);
+});
+
+test('overlapping refresh cycles discard the older baby snapshot before render and scheduling',async()=>{
+  let settingsCall=0,releaseOld;const oldTasks=new Promise(resolve=>{releaseOld=resolve});
+  const repo={
+    list:async(store,{babyId}={})=>{
+      if(store==='babies')return[{id:'b1',name:'旧宝宝'},{id:'b2',name:'新宝宝'}];
+      if(store==='taskInstances'&&babyId==='b1')return oldTasks;
+      if(store==='taskInstances')return[];
+      return[];
+    },
+    get:async store=>store==='appSettings'?{id:'global',activeBabyId:++settingsCall===1?'b1':'b2'}:undefined
+  };
+  const shared=new AppStore(repo,{now:()=>new Date('2026-08-12T08:00:00+08:00')}),coordinator=createRefreshCoordinator(),renders=[],schedules=[];
+  const options={store:shared,repository:repo,coordinator,render:async snapshot=>renders.push(snapshot.babyId),schedule:async snapshot=>schedules.push(snapshot.babyId)};
+  const older=runRefreshCycle(options),newer=runRefreshCycle(options);
+  await newer; releaseOld([]); await older;
+  assert.deepEqual(renders,['b2']); assert.deepEqual(schedules,['b2']);
+  assert.equal(shared.activeBabyId,'b2');
+});
+
+test('notification id sync clears stale backup ids and loads restored ids in place',()=>{
+  const ids=new Set(['old-a','old-b']),same=ids;
+  syncNotifiedTasks(ids,{notifiedTaskIds:['new-a','new-b']});
+  assert.equal(ids,same); assert.deepEqual([...ids],['new-a','new-b']);
+  syncNotifiedTasks(ids,{notifiedTaskIds:[]});
+  assert.deepEqual([...ids],[]);
 });
