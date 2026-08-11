@@ -4,7 +4,7 @@ import { readFile } from 'node:fs/promises';
 import { todayView } from '../src/ui/today.js';
 import { formatTimelineDate } from '../src/ui/render.js';
 import { onboardingView } from '../src/ui/onboarding.js';
-import { mealsView } from '../src/ui/meals.js';
+import { mealsView, recipeMatchesFilters } from '../src/ui/meals.js';
 import { growthView, chartSvg } from '../src/ui/growth.js';
 import { recordsView } from '../src/ui/records.js';
 import { formatDateTimeLocal } from '../src/app.js';
@@ -83,6 +83,50 @@ test('meal and growth screens expose shopping, preferences and tooth actions', (
   assert.match(meals,/data-stage="stage4"/);
   assert.match(growthView({timeline:[]}),/data-growth="tooth"/);
   assert.match(chartSvg({ready:true,min:8,max:9,points:[{x:0,y:1,value:8,date:'2026-07-20'},{x:1,y:0,value:9,date:'2026-07-21'}]}),/<polyline/);
+});
+
+const detailedRecipe={
+  id:7001,name:'<南瓜&牛肉软饭>',stage:'stage4',stageName:'咀嚼练习期',group:'软饭',staple:'米饭',texture:'软饭',
+  ingredients:['熟米饭 45g','南瓜 20g','牛肉 15g'],steps:['食材蒸熟','压拌成团'],chewingLevel:'beginner-chewing',
+  sizeGuide:'成人拇指第一节大小',softnessTest:'拇指和食指可轻松压碎',fingerFood:true,allergens:[],
+  substitutions:['牛肉可换鸡肉'],mealSlots:['午餐'],freezable:true,vegetable:'南瓜'
+};
+
+test('stage4 recipe browser exposes combined chewing filters and accessible details', () => {
+  const html=mealsView({recipes:[detailedRecipe],stage:'stage4'});
+  for(const id of ['recipe-search','recipe-stage','recipe-chewing-level','recipe-finger-food']) assert.match(html,new RegExp(`id="${id}"`));
+  assert.match(html,/<details[^>]*class="recipe-details"/);
+  assert.match(html,/<summary>查看完整做法与安全提示<\/summary>/);
+  for(const text of ['熟米饭 45g','食材蒸熟','成人拇指第一节大小','拇指和食指可轻松压碎','未标注常见过敏原','牛肉可换鸡肉','适合手抓','午餐','可冷冻保存']) assert.match(html,new RegExp(text));
+  assert.doesNotMatch(html,/<南瓜&牛肉软饭>/);
+  assert.match(html,/&lt;南瓜&amp;牛肉软饭&gt;/);
+});
+
+test('legacy recipes render a useful fallback without fabricated safety claims', () => {
+  const html=mealsView({recipes:[{id:2,name:'旧食谱',stage:'stage4',stageName:'咀嚼练习期',ingredients:['米饭']}],stage:'stage4'});
+  assert.match(html,/旧食谱/);
+  assert.match(html,/详细做法待补充/);
+  assert.match(html,/尺寸指导待补充/);
+  assert.match(html,/软硬度测试待补充/);
+  assert.match(html,/过敏原信息待补充/);
+  assert.match(html,/进食方式待补充/);
+  assert.match(html,/保存方式待补充/);
+});
+
+test('recipe filter combines stage, search, chewing level and finger food', () => {
+  assert.equal(recipeMatchesFilters(detailedRecipe,{stage:'stage4',query:'牛肉',chewingLevel:'beginner-chewing',fingerFood:'yes'}),true);
+  assert.equal(recipeMatchesFilters(detailedRecipe,{stage:'stage4',query:'牛肉',chewingLevel:'advanced-chewing',fingerFood:'yes'}),false);
+  assert.equal(recipeMatchesFilters(detailedRecipe,{stage:'stage3',query:'',chewingLevel:'all',fingerFood:'all'}),false);
+  assert.equal(recipeMatchesFilters(detailedRecipe,{stage:'all',query:'',chewingLevel:'all',fingerFood:'no'}),false);
+  assert.equal(recipeMatchesFilters({name:'旧食谱',stage:'stage4',ingredients:[]},{stage:'stage4',query:'旧',chewingLevel:'all',fingerFood:'all'}),true);
+  assert.equal(recipeMatchesFilters({name:'旧食谱',stage:'stage4',ingredients:[]},{stage:'stage4',query:'',chewingLevel:'all',fingerFood:'no'}),false);
+});
+
+test('recipe browser uses 320px-safe wrapping and overflow rules', async () => {
+  const css=await readFile('assets/styles/app.css','utf8');
+  assert.match(css,/\.recipe-filter-row\s*\{[^}]*grid-template-columns\s*:\s*repeat\(2,minmax\(0,1fr\)\)[^}]*\}/s);
+  assert.match(css,/\.recipe-card\s*\{[^}]*min-width\s*:\s*0[^}]*overflow-wrap\s*:\s*anywhere[^}]*\}/s);
+  assert.match(css,/@media\s*\(max-width\s*:\s*380px\)\s*\{[^}]*\.recipe-filter-row\s*\{[^}]*grid-template-columns\s*:\s*1fr/s);
 });
 
 test('records screen preserves stable record management controls', () => {
