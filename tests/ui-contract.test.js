@@ -40,6 +40,36 @@ function fakeDialogDocument(){
 test('today view exposes current, next, sleep, quick actions and timeline regions', () => {
   const html=todayView({baby:{name:'柚柚'},primary:null,next:null,sleepMinutes:0,timeline:[]});
   for(const id of ['current-task-card','next-task-card','sleep-summary','quick-actions','today-timeline']) assert.match(html,new RegExp(`id="${id}"`));
+  assert.match(html,/data-quick="stool"[^>]*>[\s\S]*?记录便便/);
+  assert.match(html,/data-quick="urine"[^>]*>[\s\S]*?记录尿尿/);
+  assert.match(html,/data-quick="water"/);
+  assert.equal((html.match(/data-quick="stool"/g)||[]).length,1);
+  assert.equal((html.match(/data-quick="urine"/g)||[]).length,1);
+});
+
+test('records view offers independent accessible one-tap stool and urine actions', () => {
+  const html=recordsView({records:[
+    {id:'s1',type:'stool',value:1,occurredAt:'2026-08-11T08:00:00.000Z'},
+    {id:'u1',type:'urine',value:1,occurredAt:'2026-08-11T09:00:00.000Z'}
+  ]});
+  assert.match(html,/data-record="stool"[^>]*aria-label="记录便便"/);
+  assert.match(html,/data-record="urine"[^>]*aria-label="记录尿尿"/);
+  assert.match(html,/便便 · 1 次/);
+  assert.match(html,/尿尿 · 1 次/);
+});
+
+test('quick count actions disable during writes and surface errors', async () => {
+  const source=await readFile('src/app.js','utf8');
+  assert.match(source,/button\.disabled=true/);
+  assert.match(source,/finally\{button\.disabled=false\}/);
+  assert.match(source,/记录失败/);
+  assert.match(source,/persistCountRecord/);
+});
+
+test('five today quick actions stay uniform at phone widths', async () => {
+  const css=await readFile('assets/styles/app.css','utf8');
+  assert.match(css,/\.quick-grid\{grid-template-columns:repeat\(5,minmax\(0,1fr\)\)\}/);
+  assert.match(css,/@media\(max-width:480px\)\{\.quick-grid\{grid-template-columns:repeat\(3,minmax\(0,1fr\)\)\}\}/);
 });
 
 test('today task exposes only complete and more as top-level actions', () => {
