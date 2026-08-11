@@ -1,6 +1,6 @@
 const CACHE_NAME='baby-growth-v1-20260720-r9';
 const APP_SHELL=[
-  "./","./index.html","./manifest.webmanifest","./assets/styles/app.css","./assets/icons/icon.svg","./assets/icons/icon-192.svg","./assets/icons/icon-512.svg","./data/recipes.js","./data/recipes-base.js","./data/stage4-recipes-v2.js",
+  "./","./index.html","./manifest.webmanifest","./assets/styles/app.css","./assets/icons/icon.svg","./assets/icons/icon-192.svg","./assets/icons/icon-512.svg","./data/recipes.js","./data/recipes-base.js","./data/stage4-recipes-v2.js","./data/stage4-recipes-v2-rows.js",
   "./src/app.js","./src/db.js","./src/store.js","./src/router.js","./src/core/id.js","./src/core/dates.js","./src/core/schema.js",
   "./src/features/schedule/template.js","./src/features/schedule/engine.js","./src/features/schedule/select-current.js","./src/features/schedule/sleep-anchor.js",
   "./src/features/meals/planner.js","./src/features/meals/preferences.js","./src/features/meals/presentation.js","./src/features/meals/recipe-details.js","./src/features/meals/shopping.js",

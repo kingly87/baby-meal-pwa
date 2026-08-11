@@ -43,10 +43,50 @@ test('chewing recipes are explicitly varied, uniquely named and new names have n
   assert.ok(combinations.size >= 240, `only ${combinations.size} normalized recipe combinations`);
 });
 
+test('new chewing recipes are curated records rather than a cartesian or single-template catalog', () => {
+  const added=recipes.filter(recipe => typeof recipe.id === 'string' && recipe.id.startsWith('stage4-v2-'));
+  assert.equal(added.length,180);
+  const pairs=new Set(added.map(recipe => `${recipe.protein}|${recipe.vegetable}`));
+  const forms=new Set(added.map(recipe => `${recipe.staple}|${recipe.texture}`));
+  assert.notEqual(pairs.size*forms.size,added.length,'new rows form a complete protein-vegetable × form cartesian product');
+  const amounts=new Set(added.map(recipe => recipe.ingredients.slice(0,2).join('|')));
+  assert.ok(amounts.size>=24,`only ${amounts.size} amount selections`);
+  assert.ok(new Set(added.map(recipe => recipe.sizeGuide)).size>=8,'size guidance is template-identical');
+  assert.ok(new Set(added.map(recipe => recipe.storage)).size>=5,'storage guidance is template-identical');
+  assert.ok(new Set(added.map(recipe => recipe.substitutions.join('|'))).size>=8,'substitutions are template-identical');
+  const stepPatterns=new Set(added.map(recipe => recipe.steps.join('|')
+    .replaceAll(recipe.name,'{name}').replaceAll(recipe.protein,'{protein}')
+    .replaceAll(recipe.vegetable,'{vegetable}').replaceAll(recipe.staple,'{staple}')
+    .replaceAll(recipe.cookingMethod,'{method}').replace(/\d+/g,'#')));
+  assert.ok(stepPatterns.size>=12,`only ${stepPatterns.size} semantic step patterns`);
+  const methodCounts=new Map();
+  for (const recipe of added) methodCounts.set(recipe.cookingMethod,(methodCounts.get(recipe.cookingMethod)||0)+1);
+  assert.ok(new Set(methodCounts.values()).size>1,'cooking methods are mechanically uniform');
+  for (const recipe of added) {
+    const steps=recipe.steps.join('|');
+    if (/蒸糕/.test(recipe.staple)) assert.match(steps,/面粉|蛋液|面糊/,recipe.name);
+    if (/软饼/.test(recipe.staple)) assert.match(steps,/薄摊|面糊|加盖/,recipe.name);
+    if (/碎软面|意面/.test(recipe.staple)) assert.match(`${steps}|${recipe.sizeGuide}`,/煮软|剪短|短段/,recipe.name);
+    if (/饺子/.test(recipe.staple)) assert.match(steps,/饺子皮|包成|煮透/,recipe.name);
+    if (/馄饨/.test(recipe.staple)) assert.match(steps,/馄饨皮|包成|煮透/,recipe.name);
+    if (recipe.texture==='鱼饼') assert.match(recipe.protein,/鱼|鳕|鲈|三文鱼/,recipe.name);
+    if (recipe.texture==='面条') assert.match(recipe.sizeGuide,/剪|短/,recipe.name);
+    if (/软饼/.test(recipe.staple)) assert.match(recipe.cookingMethod,/小火|薄铺/,recipe.name);
+    if (/饺子|馄饨/.test(recipe.staple)) assert.match(recipe.cookingMethod,/煮/,recipe.name);
+    if (/肉丸|鱼饼/.test(recipe.texture)) assert.match(recipe.cookingMethod,/剁细|扁椭圆/,recipe.name);
+  }
+});
+
 test('chewing recipes encode safe shapes, textures and allergen-aware preparation', () => {
   const stage4=recipes.filter(recipe => recipe.stage === 'stage4');
   const forbidden=/(蜂蜜|整粒坚果|整颗(?:葡萄|番茄|圣女果)|硬(?:生)?胡萝卜|硬(?:生)?苹果)/;
+  const allergenSources=[
+    ['蛋',/鸡蛋|蛋液|蒸蛋/],['小麦',/小麦|面粉|面条|意面|饺子皮|馄饨皮/],['大豆',/豆腐|大豆/],
+    ['奶',/牛奶|奶酪|酸奶|乳制品/],['鱼',/鳕鱼|鲈鱼|三文鱼|鱼肉/],['甲壳类',/虾|蟹/],
+    ['花生',/花生/],['坚果',/坚果|杏仁|核桃|腰果/]
+  ];
   for (const recipe of stage4) {
+    const ingredientText=recipe.ingredients.join('|');
     const text=[recipe.name,...recipe.ingredients,...recipe.steps,recipe.sizeGuide,recipe.softnessTest].join('|');
     assert.doesNotMatch(text,forbidden,recipe.name);
     assert.match(recipe.softnessTest,/拇指|手指|压碎/,recipe.name);
@@ -58,6 +98,13 @@ test('chewing recipes encode safe shapes, textures and allergen-aware preparatio
     if (recipe.allergens.includes('小麦')) assert.match(recipe.ingredients.join('|'),/小麦|面粉|面条|意面|饺子皮|馄饨皮/,recipe.name);
     if (recipe.allergens.includes('蛋')) assert.ok(recipe.ingredients.some(item => /蛋.*\d+.*g/.test(item)),`${recipe.name}: missing measured egg source`);
     if (recipe.allergens.includes('小麦')) assert.ok(recipe.ingredients.some(item => /(?:小麦|面粉|面条|意面|饺子皮|馄饨皮).*\d+.*g/.test(item)),`${recipe.name}: missing measured wheat source`);
+    if (/豆腐|大豆/.test(recipe.ingredients.join('|'))) assert.ok(recipe.allergens.includes('大豆'),recipe.name);
+    if (/小麦|面粉|面条|意面|饺子皮|馄饨皮/.test(recipe.ingredients.join('|'))) assert.ok(recipe.allergens.includes('小麦'),recipe.name);
+    if (recipe.allergens.includes('大豆')) assert.ok(recipe.ingredients.some(item => /豆腐.*\d+.*g/.test(item)),`${recipe.name}: missing measured soy source`);
+    for (const [allergen,source] of allergenSources) {
+      if (source.test(ingredientText)) assert.ok(recipe.allergens.includes(allergen),`${recipe.name}: missing ${allergen}`);
+      if (recipe.allergens.includes(allergen)) assert.match(ingredientText,source,`${recipe.name}: ${allergen} has no ingredient source`);
+    }
     assert.doesNotMatch(recipe.steps.join('|'),/第\d+种处理|方法\d+/,recipe.name);
   }
 });

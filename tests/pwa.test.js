@@ -21,7 +21,7 @@ test('service worker has safe caching, navigation fallback and controlled update
   const sw=await readFile('service-worker.js','utf8');
   assert.ok(sw.includes("const CACHE_NAME='baby-growth-v1-20260720-r9'"));
   for(const token of ['response.ok','request.mode === \'navigate\'','SKIP_WAITING','caches.delete','notificationclick','showNotification']) assert.ok(sw.includes(token),token);
-  const appFiles=['./','./index.html','./assets/styles/app.css','./data/recipes.js','./data/stage4-recipes-v2.js','./src/app.js','./src/features/meals/recipe-details.js','./src/features/migration/v2.js','./manifest.webmanifest'];
+  const appFiles=['./','./index.html','./assets/styles/app.css','./data/recipes.js','./data/stage4-recipes-v2.js','./data/stage4-recipes-v2-rows.js','./src/app.js','./src/features/meals/recipe-details.js','./src/features/migration/v2.js','./manifest.webmanifest'];
   for(const file of appFiles) assert.ok(sw.includes(JSON.stringify(file)),file);
   for(const file of await javascriptFiles('src')) assert.ok(sw.includes(JSON.stringify(`./${file}`)),`missing offline cache entry: ${file}`);
 });
