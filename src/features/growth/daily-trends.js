@@ -77,8 +77,10 @@ function sleepTotals(sleeps,keys,nowMs){
 function average(points){
   const present=points.filter(point=>point.hasData);
   if(!present.length)return null;
-  return Math.round(present.reduce((sum,point)=>sum+point.value,0)/present.length*100)/100;
+  return present.reduce((sum,point)=>sum+point.value,0)/present.length;
 }
+
+const round2=value=>Math.round(value*100)/100;
 
 function pointsFor({records,sleeps,metric,keys,nowMs}){
   const totals=metric==='sleep'?sleepTotals(sleeps,keys,nowMs):recordTotals(records,metric,keys,nowMs);
@@ -102,8 +104,10 @@ export function dailyTrendModel({records=[],sleeps=[],metric='sleep',days=7,endD
   const source={records:Array.isArray(records)?records:[],sleeps:Array.isArray(sleeps)?sleeps:[],metric,nowMs};
   const rawPoints=pointsFor({...source,keys:currentKeys});
   const previousPoints=pointsFor({...source,keys:previousKeys});
-  const currentAverage=average(rawPoints),previousAverage=average(previousPoints);
-  const delta=currentAverage==null||previousAverage==null?null:Math.round((currentAverage-previousAverage)*100)/100;
-  const points=rawPoints.map(point=>({...point,value:Math.round(point.value*100)/100}));
+  const rawAverage=average(rawPoints),rawPreviousAverage=average(previousPoints);
+  const currentAverage=rawAverage==null?null:round2(rawAverage);
+  const previousAverage=rawPreviousAverage==null?null:round2(rawPreviousAverage);
+  const delta=rawAverage==null||rawPreviousAverage==null?null:round2(rawAverage-rawPreviousAverage);
+  const points=rawPoints.map(point=>({...point,value:round2(point.value)}));
   return{metric,days,unit:METRICS[metric].unit,points,average:currentAverage,previousAverage,delta};
 }

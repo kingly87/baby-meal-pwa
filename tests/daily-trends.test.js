@@ -90,6 +90,15 @@ test('computes sleep averages before rounding individual displayed days',()=>{
   assert.equal(model.average,.01);
 });
 
+test('computes sleep delta from raw averages before final rounding',()=>{
+  const sleeps=[
+    {id:'previous-short',startAt:'2026-07-26T00:00:00.000+08:00',endAt:'2026-07-26T00:00:14.400+08:00'},
+    {id:'current-short',startAt:'2026-08-02T00:00:00.000+08:00',endAt:'2026-08-02T00:00:18.000+08:00'}
+  ];
+  const model=dailyTrendModel({records:[],sleeps,metric:'sleep',days:7,endDate:'2026-08-02',now});
+  assert.deepEqual({average:model.average,previousAverage:model.previousAverage,delta:model.delta},{average:.01,previousAverage:0,delta:0});
+});
+
 test('clamps a future end date to the local date at now without hiding todays records',()=>{
   const records=[{id:'today',type:'milk',value:120,occurredAt:'2026-08-02T08:00:00+08:00'}];
   const model=dailyTrendModel({records,sleeps:[],metric:'milk',days:7,endDate:'2026-08-20',now});
