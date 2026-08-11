@@ -45,10 +45,13 @@ export function generateWeek(catalog, options) {
   for (let day = 0; day < 7; day++) {
     const meals = [];
     for (let slot = 0; slot < Math.min(3, Math.max(1, mealCount)); slot++) {
-      let pool = candidates.filter(recipe => !recent.slice(-2).includes(recipe.staple) && !meals.some(meal => meal.group === recipe.group));
-      if (!pool.length) { pool = candidates.filter(recipe => !meals.some(meal => meal.group === recipe.group)); if (!relaxedRules.includes('主食轮换')) relaxedRules.push('主食轮换'); }
-      if (!pool.length) { pool = candidates; if (!relaxedRules.includes('同日类别轮换')) relaxedRules.push('同日类别轮换'); }
-      pool = preferShapeVariety(pool, recentShapes.slice(-2));
+      let pool = preferShapeVariety(candidates, recentShapes.slice(-2));
+      const staplePool = pool.filter(recipe => !recent.slice(-2).includes(recipe.staple));
+      if (staplePool.length) pool = staplePool;
+      else if (!relaxedRules.includes('主食轮换')) relaxedRules.push('主食轮换');
+      const sameDayPool = pool.filter(recipe => !meals.some(meal => meal.group === recipe.group));
+      if (sameDayPool.length) pool = sameDayPool;
+      else if (!relaxedRules.includes('同日类别轮换')) relaxedRules.push('同日类别轮换');
       const recipe = weightedPick(pool, { favorites, disliked, groupCounts, random });
       recent.push(recipe.staple); groupCounts[recipe.group] = (groupCounts[recipe.group] || 0) + 1;
       recentShapes.push({ group: recipe.group, texture: recipe.texture, cookingMethod: recipe.cookingMethod });

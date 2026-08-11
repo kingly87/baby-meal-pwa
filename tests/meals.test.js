@@ -54,6 +54,15 @@ test('weekly menu avoids a recently used group when an alternative exists', () =
   assert.deepEqual(generatedRecipeIds(catalog).slice(0, 3), [1, 3, 2]);
 });
 
+test('recent group diversity outranks staple rotation', () => {
+  const catalog = [
+    rotationRecipe(1, '饭团', '软团', '蒸', { staple: '米饭' }),
+    rotationRecipe(2, '肉丸', '软丸', '煮', { staple: '米饭' }),
+    rotationRecipe(3, '饭团', '颗粒饭', '焖', { staple: '面条' })
+  ];
+  assert.deepEqual(generatedRecipeIds(catalog).slice(0, 2), [1, 2]);
+});
+
 test('weekly menu further avoids recent texture and cooking method', () => {
   const catalog = [
     rotationRecipe(1, '饭团', '软团', '蒸'),
