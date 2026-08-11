@@ -8,7 +8,7 @@ import { mealsView, recipeMatchesFilters } from '../src/ui/meals.js';
 import { growthView, chartSvg } from '../src/ui/growth.js';
 import { recordsView } from '../src/ui/records.js';
 import { formatDateTimeLocal } from '../src/app.js';
-import { openActionDialog } from '../src/ui/dialogs.js';
+import { openActionDialog, runDialogSubmit } from '../src/ui/dialogs.js';
 
 function fakeDialogDocument(){
   class Node extends EventTarget{
@@ -64,6 +64,32 @@ test('quick count actions disable during writes and surface errors', async () =>
   assert.match(source,/finally\{button\.disabled=false\}/);
   assert.match(source,/记录失败/);
   assert.match(source,/persistCountRecord/);
+});
+
+test('count edit dialog exposes integer count, time, note and async error handling', async () => {
+  const source=await readFile('src/app.js','utf8');
+  assert.match(source,/item\.type==='stool'\?'便便':item\.type==='urine'\?'尿尿'/);
+  assert.match(source,/name="value" type="number" min="1" step="1"/);
+  assert.match(source,/name="occurredAt" type="datetime-local"/);
+  assert.match(source,/updateDailyRecord/);
+  const dialogs=await readFile('src/ui/dialogs.js','utf8');
+  assert.match(dialogs,/role="status"/);
+  assert.match(dialogs,/runDialogSubmit/);
+});
+
+test('async dialog submit locks during storage and keeps the dialog open on failure', async () => {
+  const submit={disabled:false},error={hidden:true,textContent:''},closed=[];
+  let rejectWrite;
+  const pending=runDialogSubmit({submit,error,values:{value:'1'},close:value=>closed.push(value),onSubmit:()=>new Promise((resolve,reject)=>{rejectWrite=reject})});
+  assert.equal(submit.disabled,true);
+  const duplicate=await runDialogSubmit({submit,error,values:{value:'1'},close:value=>closed.push(value),onSubmit:async()=>{throw new Error('不应执行')}});
+  assert.equal(duplicate,false);
+  rejectWrite(new Error('保存失败'));
+  assert.equal(await pending,false);
+  assert.equal(submit.disabled,false);
+  assert.equal(error.hidden,false);
+  assert.equal(error.textContent,'保存失败');
+  assert.deepEqual(closed,[]);
 });
 
 test('five today quick actions stay uniform at phone widths', async () => {

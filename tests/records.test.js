@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createNumericRecord, createCountRecord, persistCountRecord, updateById, removeById } from '../src/features/records/records.js';
+import { createNumericRecord, createCountRecord, persistCountRecord, updateDailyRecord, updateById, removeById } from '../src/features/records/records.js';
 import { MemoryRepository } from '../src/db.js';
 import { sleepDurationMinutes, minutesOverlappingLocalDay } from '../src/features/records/sleep.js';
 import { createObservation, observationEndDate } from '../src/features/records/new-food.js';
@@ -38,6 +38,31 @@ test('one-tap count persistence binds the selected baby and keeps both types sep
 test('one-tap count persistence exposes repository failures without returning success', async () => {
   const repo={put:async()=>{throw new Error('storage unavailable')}};
   await assert.rejects(persistCountRecord(repo,{babyId:'b1',type:'urine'},()=> 'u1',()=>new Date('2026-08-11T09:00:00.000Z')),/storage unavailable/);
+});
+
+test('count record edits persist an integer count, local time and trimmed note', async () => {
+  const repo=new MemoryRepository({dailyRecords:[{id:'s1',babyId:'b1',type:'stool',value:1,unit:'次',occurredAt:'2026-08-11T08:00:00.000Z',note:'',createdAt:'2026-08-11T08:00:00.000Z',updatedAt:'2026-08-11T08:00:00.000Z'}]});
+  const updated=await updateDailyRecord(repo,{id:'s1',value:'2',occurredAt:'2026-08-11T18:30',note:'  正常  '},()=>new Date('2026-08-11T11:00:00.000Z'));
+  assert.equal(updated.value,2);
+  assert.equal(updated.occurredAt,new Date('2026-08-11T18:30').toISOString());
+  assert.equal(updated.note,'正常');
+  assert.equal(updated.updatedAt,'2026-08-11T11:00:00.000Z');
+  assert.deepEqual(await repo.get('dailyRecords','s1'),updated);
+});
+
+test('count edits reject invalid counts and times without changing storage', async () => {
+  const original={id:'u1',babyId:'b1',type:'urine',value:1,unit:'次',occurredAt:'2026-08-11T08:00:00.000Z',note:''};
+  const repo=new MemoryRepository({dailyRecords:[original]});
+  for(const patch of [{value:0,occurredAt:'2026-08-11T18:30'},{value:1.5,occurredAt:'2026-08-11T18:30'},{value:1,occurredAt:'bad'}]){
+    await assert.rejects(updateDailyRecord(repo,{id:'u1',...patch}),/次数|时间/);
+    assert.deepEqual(await repo.get('dailyRecords','u1'),original);
+  }
+});
+
+test('milk and water edits retain non-negative numeric semantics', async () => {
+  const repo=new MemoryRepository({dailyRecords:[{id:'m1',babyId:'b1',type:'milk',value:120,occurredAt:'2026-08-11T08:00:00.000Z',note:''}]});
+  assert.equal((await updateDailyRecord(repo,{id:'m1',value:'0',note:' skipped '})).value,0);
+  await assert.rejects(updateDailyRecord(repo,{id:'m1',value:-1}),/负数/);
 });
 
 test('sleep supports crossing midnight', () => {

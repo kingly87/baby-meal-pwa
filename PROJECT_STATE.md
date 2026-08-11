@@ -64,5 +64,6 @@
 - 新记录仅使用 `stool` 与 `urine` 两种类型；旧 `toilet`/`stool` 数据不改写，尿尿不会混入旧排便数据。
 - 快捷写入期间按钮会锁定，失败时显示可见错误；今日页原有喝奶、喝水与睡眠入口继续保留。
 - 320px 手机布局下五个快捷入口按三列换行，保持统一触控尺寸。
-- Service Worker 缓存版本升级为 `baby-growth-v1-20260720-r13`。
-- 自动化验证结果为 179 项全部通过，`npm.cmd run check` 与 `git diff --check` 通过。
+- 便便和尿尿记录可编辑发生时间、正整数次数及备注；保存失败时编辑框保持打开并显示错误。
+- Service Worker 缓存版本升级为 `baby-growth-v1-20260720-r14`。
+- 自动化验证结果为 184 项全部通过，`npm.cmd run check` 与 `git diff --check` 通过。
