@@ -58,6 +58,12 @@ test('records view offers independent accessible one-tap stool and urine actions
   assert.match(html,/尿尿 · 1 次/);
 });
 
+test('records view clearly reports unavailable local record history',()=>{
+  const html=recordsView({records:[],sleeps:[],dataError:'记录数据暂时无法读取'});
+  assert.match(html,/role="status"/);
+  assert.match(html,/记录数据暂时无法读取/);
+});
+
 test('quick count actions disable during writes and surface errors', async () => {
   const source=await readFile('src/app.js','utf8');
   assert.match(source,/button\.disabled=true/);
@@ -397,4 +403,7 @@ test('app binds trend metric and range controls without changing route',async()=
   assert.match(app,/trendState\.setDays/);
   const importHandler=app.match(/async function importData\(event\)\{[^\n]+/)?.[0]||'';
   assert.match(importHandler,/importBackup[\s\S]*trendState\.reset\(\)[\s\S]*refresh/);
+  const deleteHandler=app.match(/async function deleteBaby\(\)\{[^\n]+/)?.[0]||'';
+  assert.match(deleteHandler,/setActiveBaby|activeBabyId|appSettings/);
+  assert.match(deleteHandler,/trendState\.reset\(\)[\s\S]*refresh/);
 });

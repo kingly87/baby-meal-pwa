@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { MemoryRepository } from '../src/db.js';
-import { loadApplicationModel, bindOnboardingActions, ensureDailySchedule, recalculateScheduleForSleep, loadDailyTrend, createTrendState } from '../src/app.js';
+import { loadApplicationModel, bindOnboardingActions, ensureDailySchedule, recalculateScheduleForSleep, loadDailyTrend, createTrendState, loadRenderData } from '../src/app.js';
 import { createDefaultTemplate } from '../src/features/schedule/template.js';
 import { createBackup } from '../src/features/backup/backup.js';
 
@@ -218,4 +218,21 @@ test('daily trend reload reflects quick records and completed sleep immediately'
 test('daily trend loader surfaces repository failures for the view boundary',async()=>{
   const repo={list:async store=>{if(store==='sleepSessions')throw new Error('IndexedDB unavailable');return[]}};
   await assert.rejects(()=>loadDailyTrend(repo,{babyId:'b1'}),/IndexedDB unavailable/);
+});
+
+test('render data isolates failed record stores while loading every other page store once',async()=>{
+  const calls=new Map();
+  const repo={list:async store=>{
+    calls.set(store,(calls.get(store)||0)+1);
+    if(['dailyRecords','sleepSessions'].includes(store))throw new Error(`${store} unavailable`);
+    if(store==='babies')return[{id:'b1',name:'多米'}];
+    return[];
+  }};
+  const result=await loadRenderData(repo);
+  assert.deepEqual(result.data.babies,[{id:'b1',name:'多米'}]);
+  assert.deepEqual(result.data.dailyRecords,[]);
+  assert.deepEqual(result.data.sleepSessions,[]);
+  assert.match(result.errors.dailyRecords.message,/dailyRecords unavailable/);
+  assert.match(result.errors.sleepSessions.message,/sleepSessions unavailable/);
+  assert.ok([...calls.values()].every(count=>count===1));
 });
