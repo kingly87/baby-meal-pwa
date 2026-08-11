@@ -11,11 +11,13 @@ function detailList(items,fallback){
   return items.length?`<ul>${items.map(item=>`<li>${esc(item)}</li>`).join('')}</ul>`:`<p class="recipe-detail-fallback">${esc(fallback)}</p>`;
 }
 
-function recipeDetails(recipe){
+function recipeDetails(recipe,source){
   const allergens=recipe.allergens.length?recipe.allergens.join('、'):(recipe.chewingLevel?'未标注常见过敏原':'过敏原信息待补充');
-  const storage=recipe.freezable?'可冷冻保存':(recipe.chewingLevel?'建议现做现吃':'保存方式待补充');
+  const storage=typeof recipe.storage==='string'&&recipe.storage.trim()?recipe.storage.trim():'保存方式待补充';
+  const freezingValue=typeof source?.freezerFriendly==='boolean'?source.freezerFriendly:(typeof source?.freezable==='boolean'?source.freezable:null);
+  const freezing=freezingValue===true?'可冷冻':freezingValue===false?'不建议冷冻':'冷冻信息待补充';
   const eatingMethod=recipe.chewingLevel?(recipe.fingerFood?'适合手抓':'建议使用餐具喂食'):'进食方式待补充';
-  return`<details class="recipe-details"><summary>查看完整做法与安全提示</summary><div class="recipe-detail-grid"><section><h4>配料与用量</h4>${detailList(recipe.ingredients||[],'配料用量待补充')}</section><section><h4>制作步骤</h4>${detailList(recipe.steps,'详细做法待补充')}</section><section><h4>入口尺寸</h4><p>${esc(recipe.sizeGuide||'尺寸指导待补充')}</p></section><section><h4>软硬度测试</h4><p>${esc(recipe.softnessTest||'软硬度测试待补充')}</p></section><section><h4>过敏原</h4><p>${esc(allergens)}</p></section><section><h4>替换建议</h4>${detailList(recipe.substitutions,'替换建议待补充')}</section><section><h4>适用方式</h4><p>${eatingMethod}${recipe.mealSlots.length?` · ${esc(recipe.mealSlots.join('、'))}`:' · 餐次建议待补充'}</p></section><section><h4>保存</h4><p>${storage}</p></section></div></details>`;
+  return`<details class="recipe-details"><summary>查看完整做法与安全提示</summary><div class="recipe-detail-grid"><section><h4>配料与用量</h4>${detailList(recipe.ingredients||[],'配料用量待补充')}</section><section><h4>制作步骤</h4>${detailList(recipe.steps,'详细做法待补充')}</section><section><h4>入口尺寸</h4><p>${esc(recipe.sizeGuide||'尺寸指导待补充')}</p></section><section><h4>软硬度测试</h4><p>${esc(recipe.softnessTest||'软硬度测试待补充')}</p></section><section><h4>过敏原</h4><p>${esc(allergens)}</p></section><section><h4>替换建议</h4>${detailList(recipe.substitutions,'替换建议待补充')}</section><section><h4>适用方式</h4><p>${eatingMethod}${recipe.mealSlots.length?` · ${esc(recipe.mealSlots.join('、'))}`:' · 餐次建议待补充'}</p></section><section><h4>保存说明</h4><p>${esc(storage)}</p></section><section><h4>冷冻</h4><p>${freezing}</p></section></div></details>`;
 }
 
 export function recipeMatchesFilters(recipe,{stage='all',query='',chewingLevel='all',fingerFood='all'}={}){
@@ -28,7 +30,7 @@ export function recipeMatchesFilters(recipe,{stage='all',query='',chewingLevel='
 function recipeCard(source,{favorites,disliked,stage}){
   const recipe=recipeShape(source),summary=mealSummary(recipe),visible=recipeMatchesFilters(recipe,{stage});
   const search=[cleanRecipeName(recipe.name||''),...(recipe.ingredients||[])].filter(Boolean).join(' ').toLowerCase();
-  return`<article data-stage="${esc(recipe.stage||'legacy')}" data-chewing-level="${esc(recipe.chewingLevel||'legacy')}" data-finger-food="${recipe.fingerFood?'yes':'no'}" data-search="${esc(search)}" ${visible?'':'hidden'} class="recipe-card ${disliked.includes(recipe.vegetable)?'is-disliked':''}"><span>${esc(recipe.stageName||'阶段信息待补充')}</span><h3>${esc(cleanRecipeName(recipe.name||'未命名食谱'))}</h3><p>${esc(summary.amounts||(recipe.ingredients||[]).slice(0,2).join(' · ')||'配料用量待补充')}</p><small class="meal-meta">${esc(summary.meta||'食谱摘要待补充')}</small>${recipeDetails(recipe)}<div class="button-row"><button data-action="favorite-recipe" data-id="${esc(recipe.id)}">${favorites.has(recipe.id)?'已收藏':'收藏'}</button><button data-action="dislike-food" data-food="${esc(recipe.vegetable||'')}">${disliked.includes(recipe.vegetable)?'取消不喜欢':'不喜欢'}</button></div></article>`;
+  return`<article data-stage="${esc(recipe.stage||'legacy')}" data-chewing-level="${esc(recipe.chewingLevel||'legacy')}" data-finger-food="${recipe.fingerFood?'yes':'no'}" data-search="${esc(search)}" ${visible?'':'hidden'} class="recipe-card ${disliked.includes(recipe.vegetable)?'is-disliked':''}"><span>${esc(recipe.stageName||'阶段信息待补充')}</span><h3>${esc(cleanRecipeName(recipe.name||'未命名食谱'))}</h3><p>${esc(summary.amounts||(recipe.ingredients||[]).slice(0,2).join(' · ')||'配料用量待补充')}</p><small class="meal-meta">${esc(summary.meta||'食谱摘要待补充')}</small>${recipeDetails(recipe,source)}<div class="button-row"><button data-action="favorite-recipe" data-id="${esc(recipe.id)}">${favorites.has(recipe.id)?'已收藏':'收藏'}</button><button data-action="dislike-food" data-food="${esc(recipe.vegetable||'')}">${disliked.includes(recipe.vegetable)?'取消不喜欢':'不喜欢'}</button></div></article>`;
 }
 
 export function mealsView({week,recipes=[],stage='stage4',shopping=[],preferences={}}){

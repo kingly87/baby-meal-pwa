@@ -89,7 +89,7 @@ const detailedRecipe={
   id:7001,name:'<南瓜&牛肉软饭>',stage:'stage4',stageName:'咀嚼练习期',group:'软饭',staple:'米饭',texture:'软饭',
   ingredients:['熟米饭 45g','南瓜 20g','牛肉 15g'],steps:['食材蒸熟','压拌成团'],chewingLevel:'beginner-chewing',
   sizeGuide:'成人拇指第一节大小',softnessTest:'拇指和食指可轻松压碎',fingerFood:true,allergens:[],
-  substitutions:['牛肉可换鸡肉'],mealSlots:['午餐'],freezable:true,vegetable:'南瓜'
+  substitutions:['牛肉可换鸡肉'],mealSlots:['午餐'],freezable:true,storage:'冷藏不超过 24 小时 <勿复热>',vegetable:'南瓜'
 };
 
 test('stage4 recipe browser exposes combined chewing filters and accessible details', () => {
@@ -97,7 +97,9 @@ test('stage4 recipe browser exposes combined chewing filters and accessible deta
   for(const id of ['recipe-search','recipe-stage','recipe-chewing-level','recipe-finger-food']) assert.match(html,new RegExp(`id="${id}"`));
   assert.match(html,/<details[^>]*class="recipe-details"/);
   assert.match(html,/<summary>查看完整做法与安全提示<\/summary>/);
-  for(const text of ['熟米饭 45g','食材蒸熟','成人拇指第一节大小','拇指和食指可轻松压碎','未标注常见过敏原','牛肉可换鸡肉','适合手抓','午餐','可冷冻保存']) assert.match(html,new RegExp(text));
+  for(const text of ['熟米饭 45g','食材蒸熟','成人拇指第一节大小','拇指和食指可轻松压碎','未标注常见过敏原','牛肉可换鸡肉','适合手抓','午餐','可冷冻']) assert.match(html,new RegExp(text));
+  assert.match(html,/冷藏不超过 24 小时 &lt;勿复热&gt;/);
+  assert.doesNotMatch(html,/<勿复热>/);
   assert.doesNotMatch(html,/<南瓜&牛肉软饭>/);
   assert.match(html,/&lt;南瓜&amp;牛肉软饭&gt;/);
 });
@@ -111,6 +113,13 @@ test('legacy recipes render a useful fallback without fabricated safety claims',
   assert.match(html,/过敏原信息待补充/);
   assert.match(html,/进食方式待补充/);
   assert.match(html,/保存方式待补充/);
+});
+
+test('legacy recipe storage is preserved while missing freezing metadata stays unknown', () => {
+  const html=mealsView({recipes:[{id:3,name:'旧粥',stage:'stage4',stageName:'咀嚼练习期',ingredients:['米粥'],storage:'当天吃完 & 不隔夜'}],stage:'stage4'});
+  assert.match(html,/当天吃完 &amp; 不隔夜/);
+  assert.match(html,/冷冻信息待补充/);
+  assert.doesNotMatch(html,/建议现做现吃/);
 });
 
 test('recipe filter combines stage, search, chewing level and finger food', () => {
