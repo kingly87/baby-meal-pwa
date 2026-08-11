@@ -45,6 +45,12 @@ for (const field of ['ingredients', 'steps', 'substitutions', 'mealSlots']) {
   });
 }
 
+for (const field of ['ingredients', 'steps', 'substitutions', 'mealSlots', 'allergens']) {
+  test(`rejects sparse arrays in ${field}`, () => {
+    assert.throws(() => validateChewingRecipe(validRecipe({ [field]: new Array(1) })), new RegExp(field));
+  });
+}
+
 test('allows an empty allergens array but rejects invalid allergens', () => {
   assert.equal(validateChewingRecipe(validRecipe({ allergens: [] })), true);
   assert.throws(() => validateChewingRecipe(validRecipe({ allergens: [''] })), /allergens/);

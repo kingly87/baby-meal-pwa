@@ -20,7 +20,9 @@ function validateStringList(recipe, field, allowEmpty = false) {
   if (!Array.isArray(list) || (!allowEmpty && list.length === 0)) {
     fail(field, allowEmpty ? 'must be an array' : 'must be a non-empty string array');
   }
-  if (list.some(item => !isNonEmptyText(item))) fail(field, 'must contain only non-empty strings');
+  for (let index = 0; index < list.length; index += 1) {
+    if (!isNonEmptyText(list[index])) fail(field, 'must contain only non-empty strings');
+  }
 }
 
 export function validateChewingRecipe(recipe) {
