@@ -17,19 +17,24 @@ function weightedPick(list, options) {
   return weighted.at(-1).recipe;
 }
 
-function avoidsRecent(value, recentShapes, field) {
-  return !value || !recentShapes.some(shape => shape[field] && shape[field] === value);
+function noveltyScore(recipe, recentShapes, fields) {
+  return fields.reduce((score, field) => {
+    const value = recipe[field];
+    const knownRecent = recentShapes.map(shape => shape[field]).filter(Boolean);
+    return score + (value && knownRecent.length && !knownRecent.includes(value) ? 1 : 0);
+  }, 0);
+}
+
+function highestNovelty(pool, recentShapes, fields) {
+  const scores = pool.map(recipe => noveltyScore(recipe, recentShapes, fields));
+  const best = Math.max(...scores);
+  return best > 0 ? pool.filter((recipe, index) => scores[index] === best) : pool;
 }
 
 function preferShapeVariety(pool, recentShapes) {
   if (!pool.length || !recentShapes.length) return pool;
-  const differentGroups = pool.filter(recipe => avoidsRecent(recipe.group, recentShapes, 'group'));
-  const groupPool = differentGroups.length ? differentGroups : pool;
-  const differentDetails = groupPool.filter(recipe =>
-    avoidsRecent(recipe.texture, recentShapes, 'texture') &&
-    avoidsRecent(recipe.cookingMethod, recentShapes, 'cookingMethod')
-  );
-  return differentDetails.length ? differentDetails : groupPool;
+  const groupPool = highestNovelty(pool, recentShapes, ['group']);
+  return highestNovelty(groupPool, recentShapes, ['texture', 'cookingMethod']);
 }
 
 export function generateWeek(catalog, options) {
@@ -57,6 +62,7 @@ export function generateWeek(catalog, options) {
 export function replaceMeal(week, mealId, catalog, options) {
   const allMeals = week.days.flatMap(day => day.meals);
   const targetIndex = allMeals.findIndex(meal => meal.id === mealId);
+  if (targetIndex < 0) throw new Error('找不到要替换的餐次');
   const currentRecipeId = allMeals[targetIndex]?.recipeId;
   let candidates = safeCandidates(catalog, options).filter(recipe => recipe.id !== currentRecipeId);
   if (!candidates.length) throw new Error('没有其他安全食谱可以替换');

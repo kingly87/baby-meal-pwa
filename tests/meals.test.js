@@ -114,3 +114,38 @@ test('meal replacement recommends a different recent shape when available', () =
   const changed = replaceMeal(week, 'target', catalog, { stage: 'stage4', random: () => 0 });
   assert.equal(changed.days[0].meals[1].recipeId, 3);
 });
+
+test('shape rotation keeps a candidate that improves only texture', () => {
+  const catalog = [
+    rotationRecipe(1, '饭团', '软团', '蒸'),
+    rotationRecipe(3, '肉丸', '软团', '蒸'),
+    rotationRecipe(2, '面条', '碎面', '蒸')
+  ];
+  assert.deepEqual(generatedRecipeIds(catalog).slice(0, 2), [1, 2]);
+});
+
+test('shape rotation keeps a candidate that improves only cooking method', () => {
+  const catalog = [
+    rotationRecipe(1, '饭团', '软团', '蒸'),
+    rotationRecipe(3, '肉丸', '软团', '蒸'),
+    rotationRecipe(2, '面条', '软团', '煮')
+  ];
+  assert.deepEqual(generatedRecipeIds(catalog).slice(0, 2), [1, 2]);
+});
+
+test('missing legacy shape fields do not receive a false diversity advantage', () => {
+  const catalog = [
+    rotationRecipe(1, '饭团', '软团', '蒸'),
+    rotationRecipe(2, '面条', '软团', '蒸'),
+    { id: 3, stage: 'stage4', name: 'legacy', group: '肉丸', staple: '肉', ingredients: [] }
+  ];
+  assert.deepEqual(generatedRecipeIds(catalog).slice(0, 2), [1, 2]);
+});
+
+test('meal replacement rejects an unknown meal id', () => {
+  const catalog = [rotationRecipe(1, '饭团', '软团', '蒸')];
+  assert.throws(
+    () => replaceMeal({ days: [{ meals: [] }] }, 'missing', catalog, { stage: 'stage4' }),
+    /找不到要替换的餐次/
+  );
+});
