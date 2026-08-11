@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { MemoryRepository } from '../src/db.js';
-import { loadApplicationModel, bindOnboardingActions, ensureDailySchedule, recalculateScheduleForSleep, loadDailyTrend, createTrendState, loadRenderData, runRefreshCycle, createRefreshCoordinator, createAsyncEpoch, runNotificationSchedule, runDataReplacement, changeNotificationScheduling, syncNotifiedTasks } from '../src/app.js';
+import { loadApplicationModel, bindOnboardingActions, ensureDailySchedule, recalculateScheduleForSleep, loadDailyTrend, createTrendState, loadRenderData, runRefreshCycle, createRefreshCoordinator, createAsyncEpoch, runNotificationSchedule, runDataReplacement, changeNotificationScheduling, lockApplicationAfterCommittedReplacement, syncNotifiedTasks } from '../src/app.js';
 import { createDefaultTemplate } from '../src/features/schedule/template.js';
 import { createBackup } from '../src/features/backup/backup.js';
 import { AppStore } from '../src/store.js';
@@ -354,4 +354,25 @@ test('reenabling notifications resumes and explicitly schedules once',async()=>{
   await changeNotificationScheduling({enabled:true,epoch,clearTimer:()=>events.push('clear'),persist:async enabled=>events.push(`persist:${enabled}`),schedule:async()=>events.push('schedule')});
   assert.equal(epoch.capture()(),true);
   assert.deepEqual(events,['clear','persist:true','schedule']);
+});
+
+for(const failedStep of ['sync','refresh'])test(`replacement committed ${failedStep} failure stays suspended and reports committed state`,async()=>{
+  const epoch=createAsyncEpoch(),events=[];
+  const operation=runDataReplacement({epoch,replace:async()=>events.push('replace'),sync:async()=>{events.push('sync');if(failedStep==='sync')throw new Error('sync failed')},refresh:async()=>{events.push('refresh');if(failedStep==='refresh')throw new Error('refresh failed')},schedule:async()=>events.push('schedule')});
+  await assert.rejects(operation,error=>error.committed===true&&error.cause?.message===`${failedStep} failed`);
+  assert.equal(epoch.capture()(),false);
+  assert.equal(events.includes('schedule'),false);
+});
+
+test('committed replacement failure removes old actions and exposes one accessible reload path',()=>{
+  let reloaded=false;
+  const oldAction={clicked:false,click(){this.clicked=true}},body={innerHTML:'<button id="old-action">旧操作</button>'},reloadButton={onclick:null};
+  const document={body,getElementById:id=>id==='replacement-reload'?reloadButton:null};
+  lockApplicationAfterCommittedReplacement(document,()=>{reloaded=true});
+  assert.match(body.innerHTML,/role="alert"/);
+  assert.match(body.innerHTML,/数据已导入，请重新打开应用/);
+  assert.match(body.innerHTML,/id="replacement-reload"/);
+  assert.doesNotMatch(body.innerHTML,/old-action/);
+  assert.equal(oldAction.clicked,false);
+  reloadButton.onclick();assert.equal(reloaded,true);
 });
