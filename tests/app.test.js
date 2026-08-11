@@ -27,7 +27,7 @@ test('startup audits V1 baby data, keeps the active baby and bypasses onboarding
 });
 
 function onboardingDocument(){
-  const input={files:[],value:'selected',onchange:null};
+  const input={files:[],value:'selected',disabled:false,onchange:null};
   const form={onsubmit:null};
   const modal={removed:false,remove(){this.removed=true}};
   return{input,form,modal,document:{getElementById:id=>id==='onboarding-backup'?input:id==='onboarding-form'?form:null,querySelector:selector=>selector==='.modal-backdrop'?modal:null}};
@@ -64,6 +64,29 @@ test('onboarding backup binding reports invalid files, resets input and leaves s
   assert.ok(messages.length>0);
   assert.deepEqual((await repo.exportAll()).babies,[]);
   assert.equal(await repo.get('appSettings','global'),undefined);
+});
+
+test('onboarding keeps recovery visible and distinguishes startup failure after data was restored', async () => {
+  const source=new MemoryRepository({babies:[{id:'b1',name:'多米'}],dailyRecords:[{id:'r1',babyId:'b1',type:'milk',value:120,occurredAt:'2026-08-01T08:00:00.000Z'}]});
+  const text=JSON.stringify(await createBackup(source));
+  const repo=new MemoryRepository(),fake=onboardingDocument(),messages=[];
+  fake.input.files=[{text:async()=>text}];
+  bindOnboardingActions(fake.document,{
+    repository:repo,
+    saveOnboarding:async()=>{},
+    onRestored:async()=>{throw new Error('首页启动失败')},
+    notify:message=>messages.push(message)
+  });
+
+  await fake.input.onchange({target:fake.input});
+
+  assert.equal((await repo.get('babies','b1')).name,'多米');
+  assert.equal((await repo.get('dailyRecords','r1')).value,120);
+  assert.equal(fake.modal.removed,false);
+  assert.equal(fake.input.disabled,true);
+  assert.equal(fake.input.value,'');
+  assert.equal(messages.at(-1),'数据已恢复，请重新打开应用');
+  assert.doesNotMatch(messages.at(-1),/恢复失败/);
 });
 
 test('onboarding binding keeps the new baby form submit path available', async () => {
