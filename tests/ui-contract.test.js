@@ -55,6 +55,17 @@ test('onboarding contains labeled baby, birthday, stage and privacy fields', () 
   assert.match(html,/role="dialog"/); assert.match(html,/aria-modal="true"/);
 });
 
+test('onboarding offers V1 backup restore before creating a new baby', () => {
+  const html=onboardingView();
+  const backupIndex=html.indexOf('id="onboarding-backup"');
+  const formIndex=html.indexOf('id="onboarding-form"');
+  assert.ok(backupIndex>=0);
+  assert.ok(backupIndex<formIndex);
+  assert.match(html,/id="onboarding-backup"[^>]*accept="application\/json"/);
+  assert.match(html,/恢复 V1 备份/);
+  assert.match(html,/欢迎使用 V2/);
+});
+
 test('timeline timestamps are formatted in the selected local timezone', () => {
   assert.match(formatTimelineDate('2026-07-20T08:15:00.000Z','Asia/Shanghai'),/16:15/);
 });
