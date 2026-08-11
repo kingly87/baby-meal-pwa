@@ -4,6 +4,7 @@ import { MemoryRepository } from '../src/db.js';
 import { loadApplicationModel, bindOnboardingActions, ensureDailySchedule, recalculateScheduleForSleep, loadDailyTrend, createTrendState, loadRenderData } from '../src/app.js';
 import { createDefaultTemplate } from '../src/features/schedule/template.js';
 import { createBackup } from '../src/features/backup/backup.js';
+import { AppStore } from '../src/store.js';
 
 test('startup requests onboarding when there is no baby', async () => {
   const repo=new MemoryRepository();
@@ -235,4 +236,19 @@ test('render data isolates failed record stores while loading every other page s
   assert.match(result.errors.dailyRecords.message,/dailyRecords unavailable/);
   assert.match(result.errors.sleepSessions.message,/sleepSessions unavailable/);
   assert.ok([...calls.values()].every(count=>count===1));
+});
+
+test('render data rejects critical preference failures instead of treating exclusions as empty',async()=>{
+  const repo={list:async store=>{if(store==='foodPreferences')throw new Error('preferences unavailable');return[]}};
+  await assert.rejects(()=>loadRenderData(repo),/preferences unavailable/);
+});
+
+test('refresh snapshot reuses AppStore babies tasks and menus without duplicate reads',async()=>{
+  const counts=new Map(),base=new MemoryRepository({babies:[{id:'b1',name:'多米'}],appSettings:[{id:'global',activeBabyId:'b1'}],taskInstances:[{id:'t1',babyId:'b1',date:'2026-08-11',plannedAt:'2026-08-11T08:00:00+08:00'}],weeklyMenus:[{id:'w1',babyId:'b1',startDate:'2026-08-10'}]});
+  const repo={list:async(...args)=>{counts.set(args[0],(counts.get(args[0])||0)+1);return base.list(...args)},get:(...args)=>base.get(...args)};
+  const store=new AppStore(repo,{now:()=>new Date('2026-08-11T12:00:00+08:00')});
+  await store.load();
+  const result=await loadRenderData(repo,{seed:{babies:store.babies,taskInstances:store.allTasks,weeklyMenus:store.weeks}});
+  assert.equal(result.data.taskInstances.length,1);
+  for(const name of['babies','taskInstances','weeklyMenus'])assert.equal(counts.get(name),1,name);
 });

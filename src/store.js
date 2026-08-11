@@ -3,7 +3,7 @@ import { localDateKey } from './core/dates.js';
 export class AppStore {
   constructor(repository,{now=()=>new Date()}={}) {
     this.repo=repository; this.now=now; this.babies=[]; this.activeBabyId=null;
-    this.tasks=[]; this.week=null; this.timeline=[];
+    this.tasks=[]; this.allTasks=[]; this.week=null; this.weeks=[]; this.timeline=[];
   }
   get activeBaby() { return this.babies.find(baby=>baby.id===this.activeBabyId)||this.babies[0]||null; }
   async load() {
@@ -12,11 +12,11 @@ export class AppStore {
     this.activeBabyId=setting?.activeBabyId||this.babies[0]?.id||null;
     if(this.activeBabyId) {
       const today=localDateKey(this.now());
-      this.tasks=(await this.repo.list('taskInstances',{babyId:this.activeBabyId}))
-        .filter(task=>task.date===today)
+      this.allTasks=await this.repo.list('taskInstances',{babyId:this.activeBabyId});
+      this.tasks=this.allTasks.filter(task=>task.date===today)
         .sort((a,b)=>a.plannedAt.localeCompare(b.plannedAt));
-      this.week=(await this.repo.list('weeklyMenus',{babyId:this.activeBabyId}))
-        .sort((a,b)=>b.startDate.localeCompare(a.startDate))[0]||null;
+      this.weeks=(await this.repo.list('weeklyMenus',{babyId:this.activeBabyId})).sort((a,b)=>b.startDate.localeCompare(a.startDate));
+      this.week=this.weeks[0]||null;
     }
     return this;
   }

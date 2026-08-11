@@ -62,6 +62,14 @@ test('records view clearly reports unavailable local record history',()=>{
   const html=recordsView({records:[],sleeps:[],dataError:'记录数据暂时无法读取'});
   assert.match(html,/role="status"/);
   assert.match(html,/记录数据暂时无法读取/);
+  assert.doesNotMatch(html,/还没有记录/);
+});
+
+test('today sleep summary distinguishes unavailable storage from a real zero',()=>{
+  const unavailable=todayView({sleepMinutes:0,sleepUnavailable:true});
+  assert.match(unavailable,/今日睡眠[\s\S]*暂不可用/);
+  assert.doesNotMatch(unavailable,/今日睡眠[\s\S]*0\.0 小时/);
+  assert.match(todayView({sleepMinutes:0,sleepUnavailable:false}),/今日睡眠[\s\S]*0\.0 小时/);
 });
 
 test('quick count actions disable during writes and surface errors', async () => {

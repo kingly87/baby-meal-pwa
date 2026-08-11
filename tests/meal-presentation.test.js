@@ -50,6 +50,6 @@ test('weekly menu and recipe library show useful details without pairing numbers
 
 test('PWA cache includes meal presentation module with a new revision', async () => {
   const sw=await readFile('service-worker.js','utf8');
-  assert.match(sw,/baby-growth-v1-20260720-r18/);
+  assert.match(sw,/baby-growth-v1-20260720-r19/);
   assert.ok(sw.includes('"./src/features/meals/presentation.js"'));
 });
