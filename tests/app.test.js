@@ -29,8 +29,11 @@ test('startup audits V1 baby data, keeps the active baby and bypasses onboarding
 function onboardingDocument(){
   const input={files:[],value:'selected',disabled:false,onchange:null};
   const form={onsubmit:null};
-  const modal={removed:false,remove(){this.removed=true}};
-  return{input,form,modal,document:{getElementById:id=>id==='onboarding-backup'?input:id==='onboarding-form'?form:null,querySelector:selector=>selector==='.modal-backdrop'?modal:null}};
+  const controls=[input,{disabled:false},{disabled:false}];
+  const status={hidden:true,textContent:''};
+  const label={attributes:{},setAttribute(name,value){this.attributes[name]=value},getAttribute(name){return this.attributes[name]}};
+  const modal={removed:false,remove(){this.removed=true},querySelectorAll:selector=>selector==='input,select,button'?controls:[],querySelector:selector=>selector==='label[for="onboarding-backup"]'?label:null};
+  return{input,form,modal,controls,status,label,document:{getElementById:id=>id==='onboarding-backup'?input:id==='onboarding-form'?form:id==='onboarding-recovery-status'?status:null,querySelector:selector=>selector==='.modal-backdrop'?modal:null}};
 }
 
 test('onboarding backup binding restores data, reloads the model and reports counts', async () => {
@@ -71,9 +74,11 @@ test('onboarding keeps recovery visible and distinguishes startup failure after 
   const text=JSON.stringify(await createBackup(source));
   const repo=new MemoryRepository(),fake=onboardingDocument(),messages=[];
   fake.input.files=[{text:async()=>text}];
+  let saveCalls=0;
   bindOnboardingActions(fake.document,{
     repository:repo,
-    saveOnboarding:async()=>{},
+    readForm:()=>({name:'不应创建'}),
+    saveOnboarding:async()=>{saveCalls++},
     onRestored:async()=>{throw new Error('首页启动失败')},
     notify:message=>messages.push(message)
   });
@@ -87,6 +92,16 @@ test('onboarding keeps recovery visible and distinguishes startup failure after 
   assert.equal(fake.input.value,'');
   assert.equal(messages.at(-1),'数据已恢复，请重新打开应用');
   assert.doesNotMatch(messages.at(-1),/恢复失败/);
+  assert.equal(fake.status.hidden,false);
+  assert.equal(fake.status.textContent,'数据已恢复，请重新打开应用');
+  assert.ok(fake.controls.every(control=>control.disabled));
+  assert.equal(fake.label.getAttribute('aria-disabled'),'true');
+
+  let prevented=false;
+  await fake.form.onsubmit({preventDefault(){prevented=true},currentTarget:fake.form});
+  assert.equal(prevented,true);
+  assert.equal(saveCalls,0);
+  assert.equal((await repo.list('babies')).length,1);
 });
 
 test('onboarding binding keeps the new baby form submit path available', async () => {

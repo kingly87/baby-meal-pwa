@@ -64,6 +64,7 @@ test('onboarding offers V1 backup restore before creating a new baby', () => {
   assert.match(html,/id="onboarding-backup"[^>]*accept="application\/json"/);
   assert.match(html,/恢复 V1 备份/);
   assert.match(html,/欢迎使用 V2/);
+  assert.match(html,/id="onboarding-recovery-status"[^>]*role="status"[^>]*hidden/);
 });
 
 test('timeline timestamps are formatted in the selected local timezone', () => {
