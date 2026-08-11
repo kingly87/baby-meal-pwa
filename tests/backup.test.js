@@ -80,6 +80,19 @@ test('rejects restore when any repository store already contains data without mo
   }
 });
 
+test('checks emptiness inside the restore transaction before replacing data', async () => {
+  class ConcurrentRepository extends MemoryRepository {
+    async transaction(stores,callback) {
+      await this.put('appSettings',{id:'concurrent',notificationsEnabled:true});
+      return super.transaction(stores,callback);
+    }
+  }
+  const repo=new ConcurrentRepository();
+  await assert.rejects(restoreBackupIntoEmpty(repo,JSON.stringify(restorePayload)),/当前已有数据，不能直接覆盖/);
+  assert.deepEqual(await repo.list('appSettings'),[{id:'concurrent',notificationsEnabled:true}]);
+  assert.equal((await repo.list('babies')).length,0);
+});
+
 test('invalid backup leaves an empty repository empty', async () => {
   const repo=new MemoryRepository();
   await assert.rejects(restoreBackupIntoEmpty(repo,'{bad'),/无法解析/);
