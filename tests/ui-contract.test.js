@@ -381,3 +381,20 @@ test('growth screen renders a supplied daily lifestyle trend model',()=>{
   assert.match(html,/data-trend-metric="sleep"/);
   assert.match(html,/data-trend-days="7"/);
 });
+
+test('growth screen keeps the rest of the page usable when trend loading fails',()=>{
+  const html=growthView({timeline:[],trendError:'趋势数据读取失败'});
+  assert.match(html,/role="status"/);
+  assert.match(html,/趋势数据读取失败/);
+  assert.match(html,/id="growth-chart"/);
+});
+
+test('app binds trend metric and range controls without changing route',async()=>{
+  const app=await readFile('src/app.js','utf8');
+  assert.match(app,/data-trend-metric/);
+  assert.match(app,/data-trend-days/);
+  assert.match(app,/trendState\.setMetric/);
+  assert.match(app,/trendState\.setDays/);
+  const importHandler=app.match(/async function importData\(event\)\{[^\n]+/)?.[0]||'';
+  assert.match(importHandler,/importBackup[\s\S]*trendState\.reset\(\)[\s\S]*refresh/);
+});

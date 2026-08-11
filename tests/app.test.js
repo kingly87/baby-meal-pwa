@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { MemoryRepository } from '../src/db.js';
-import { loadApplicationModel, bindOnboardingActions, ensureDailySchedule, recalculateScheduleForSleep } from '../src/app.js';
+import { loadApplicationModel, bindOnboardingActions, ensureDailySchedule, recalculateScheduleForSleep, loadDailyTrend, createTrendState } from '../src/app.js';
 import { createDefaultTemplate } from '../src/features/schedule/template.js';
 import { createBackup } from '../src/features/backup/backup.js';
 
@@ -160,4 +160,62 @@ test('completed historical sleep recalculates its target day while isolating dat
   assert.equal((await repo.get('taskInstances','milk-target')).plannedAt,'2026-07-20T07:20:00.000Z');
   assert.equal((await repo.get('taskInstances','milk-other-date')).plannedAt,'2026-07-21T08:20:00.000Z');
   assert.equal((await repo.get('taskInstances','milk-other-baby')).plannedAt,'2026-07-20T08:20:00.000Z');
+});
+
+test('daily trend loader defaults to seven-day sleep and isolates the active baby',async()=>{
+  const repo=new MemoryRepository({
+    dailyRecords:[
+      {id:'m1',babyId:'b1',type:'milk',value:120,occurredAt:'2026-08-11T08:00:00+08:00'},
+      {id:'m2',babyId:'b2',type:'milk',value:999,occurredAt:'2026-08-11T08:00:00+08:00'}
+    ],
+    sleepSessions:[
+      {id:'s1',babyId:'b1',type:'night',startAt:'2026-08-11T00:00:00+08:00',endAt:'2026-08-11T08:00:00+08:00'},
+      {id:'s2',babyId:'b2',type:'night',startAt:'2026-08-10T16:00:00+08:00',endAt:'2026-08-11T08:00:00+08:00'}
+    ]
+  });
+  const model=await loadDailyTrend(repo,{babyId:'b1',endDate:'2026-08-11',now:new Date('2026-08-11T12:00:00+08:00')});
+  assert.equal(model.metric,'sleep');
+  assert.equal(model.days,7);
+  assert.equal(model.points.at(-1).value,8);
+
+  const milk=await loadDailyTrend(repo,{babyId:'b1',metric:'milk',days:14,endDate:'2026-08-11',now:new Date('2026-08-11T12:00:00+08:00')});
+  assert.equal(milk.days,14);
+  assert.equal(milk.points.at(-1).value,120);
+});
+
+test('daily trend loader handles no baby without repository access',async()=>{
+  const repo={list(){throw new Error('should not read')}};
+  assert.equal(await loadDailyTrend(repo,{babyId:null}),null);
+});
+
+test('daily trend loader reuses already loaded records without duplicate repository reads',async()=>{
+  const repo={list(){throw new Error('duplicate read')}};
+  const model=await loadDailyTrend(repo,{babyId:'b1',metric:'milk',days:7,endDate:'2026-08-11',now:new Date('2026-08-11T12:00:00+08:00'),records:[{id:'m1',babyId:'b1',type:'milk',value:90,occurredAt:'2026-08-11T08:00:00+08:00'}],sleeps:[]});
+  assert.equal(model.points.at(-1).value,90);
+});
+
+test('trend state switches metric and range and can reset for another baby',()=>{
+  const state=createTrendState();
+  assert.deepEqual(state.value(),{metric:'sleep',days:7});
+  state.setMetric('milk'); state.setDays(14);
+  assert.deepEqual(state.value(),{metric:'milk',days:14});
+  state.reset();
+  assert.deepEqual(state.value(),{metric:'sleep',days:7});
+  assert.throws(()=>state.setMetric('weight'),/指标/);
+  assert.throws(()=>state.setDays(10),/范围/);
+});
+
+test('daily trend reload reflects quick records and completed sleep immediately',async()=>{
+  const repo=new MemoryRepository();
+  await repo.put('dailyRecords',{id:'milk-now',babyId:'b1',type:'milk',value:160,occurredAt:'2026-08-11T10:00:00+08:00'});
+  let model=await loadDailyTrend(repo,{babyId:'b1',metric:'milk',days:7,endDate:'2026-08-11',now:new Date('2026-08-11T12:00:00+08:00')});
+  assert.equal(model.points.at(-1).value,160);
+  await repo.put('sleepSessions',{id:'nap-now',babyId:'b1',type:'nap',startAt:'2026-08-11T10:00:00+08:00',endAt:'2026-08-11T11:30:00+08:00'});
+  model=await loadDailyTrend(repo,{babyId:'b1',metric:'sleep',days:7,endDate:'2026-08-11',now:new Date('2026-08-11T12:00:00+08:00')});
+  assert.equal(model.points.at(-1).value,1.5);
+});
+
+test('daily trend loader surfaces repository failures for the view boundary',async()=>{
+  const repo={list:async store=>{if(store==='sleepSessions')throw new Error('IndexedDB unavailable');return[]}};
+  await assert.rejects(()=>loadDailyTrend(repo,{babyId:'b1'}),/IndexedDB unavailable/);
 });
