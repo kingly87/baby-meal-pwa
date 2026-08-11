@@ -47,8 +47,8 @@ export function recipeShape(recipe) {
   const source = recipe && typeof recipe === 'object' && !Array.isArray(recipe) ? recipe : {};
   const shaped = { ...source };
   shaped.chewingLevel = CHEWING_LEVELS.has(source.chewingLevel) ? source.chewingLevel : null;
-  if ('ingredients' in source) shaped.ingredients = Array.isArray(source.ingredients) ? [...source.ingredients] : [];
-  for (const field of DEFAULT_LIST_FIELDS) shaped[field] = Array.isArray(source[field]) ? [...source[field]] : [];
+  if ('ingredients' in source) shaped.ingredients = Array.isArray(source.ingredients) ? source.ingredients.filter(item=>typeof item==='string') : [];
+  for (const field of DEFAULT_LIST_FIELDS) shaped[field] = Array.isArray(source[field]) ? source[field].filter(item=>typeof item==='string') : [];
   shaped.fingerFood = typeof source.fingerFood === 'boolean' ? source.fingerFood : false;
   shaped.freezable = typeof source.freezable === 'boolean' ? source.freezable : false;
   shaped.sizeGuide = typeof source.sizeGuide === 'string' ? source.sizeGuide : '';

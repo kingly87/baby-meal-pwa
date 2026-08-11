@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { toggleRecipeFavorite, toggleRecipeDislike, persistRecipePreference } from '../src/features/meals/preferences.js';
 import { recipes } from '../data/recipes.js';
 import { safeCandidates, generateWeek, replaceMeal } from '../src/features/meals/planner.js';
 import { buildShoppingList } from '../src/features/meals/shopping.js';
@@ -157,4 +158,25 @@ test('meal replacement rejects an unknown meal id', () => {
     () => replaceMeal({ days: [{ meals: [] }] }, 'missing', catalog, { stage: 'stage4' }),
     /找不到要替换的餐次/
   );
+});
+test('favorite persistence keeps the catalog recipe id type for V2 string ids', () => {
+  const recipe=recipes.find(item=>typeof item.id==='string');
+  assert.ok(recipe);
+  const selected=toggleRecipeFavorite({favorites:[]},String(recipe.id),recipes);
+  assert.deepEqual(selected.favorites,[recipe.id]);
+  assert.equal(typeof selected.favorites[0],'string');
+  assert.deepEqual(toggleRecipeFavorite(selected,String(recipe.id),recipes).favorites,[]);
+});
+
+test('favorite and dislike interactions persist using the V2 string catalog id', async () => {
+  const recipe=recipes.find(item=>typeof item.id==='string'&&item.vegetable);
+  const writes=[];
+  const repository={async get(){return{id:'baby-1',babyId:'baby-1',favorites:[],disliked:[]}},async put(store,value){writes.push({store,value});return value}};
+  await persistRecipePreference(repository,'baby-1',String(recipe.id),recipes,'favorite','2026-08-12T00:00:00.000Z');
+  await persistRecipePreference(repository,'baby-1',String(recipe.id),recipes,'dislike','2026-08-12T00:00:00.000Z');
+  assert.equal(writes[0].store,'foodPreferences');
+  assert.deepEqual(writes[0].value.favorites,[recipe.id]);
+  assert.equal(typeof writes[0].value.favorites[0],'string');
+  assert.deepEqual(writes[1].value.disliked,[recipe.vegetable]);
+  assert.deepEqual(toggleRecipeDislike({disliked:[]},String(recipe.id),recipes).disliked,[recipe.vegetable]);
 });

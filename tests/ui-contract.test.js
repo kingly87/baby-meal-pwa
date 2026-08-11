@@ -77,7 +77,7 @@ test('visual system includes minimum targets, focus, safe areas and dark mode', 
 });
 
 test('meal and growth screens expose shopping, preferences and tooth actions', () => {
-  const recipe={id:1,name:'南瓜饭',stage:'stage4',stageName:'咀嚼练习期',ingredients:['南瓜']};
+  const recipe={id:1,name:'南瓜饭',stage:'stage4',stageName:'咀嚼练习期',ingredients:['南瓜'],vegetable:'南瓜'};
   const meals=mealsView({week:null,recipes:[recipe],stage:'stage4',shopping:[{id:'s1',name:'南瓜',done:false,inStock:false}]});
   for(const action of ['toggle-shopping','add-shopping','favorite-recipe','dislike-food']) assert.match(meals,new RegExp(`data-action="${action}"`));
   assert.match(meals,/data-stage="stage4"/);
@@ -136,6 +136,43 @@ test('recipe browser uses 320px-safe wrapping and overflow rules', async () => {
   assert.match(css,/\.recipe-filter-row\s*\{[^}]*grid-template-columns\s*:\s*repeat\(2,minmax\(0,1fr\)\)[^}]*\}/s);
   assert.match(css,/\.recipe-card\s*\{[^}]*min-width\s*:\s*0[^}]*overflow-wrap\s*:\s*anywhere[^}]*\}/s);
   assert.match(css,/@media\s*\(max-width\s*:\s*380px\)\s*\{[^}]*\.recipe-filter-row\s*\{[^}]*grid-template-columns\s*:\s*1fr/s);
+});
+
+test('recipe browser limits initial detailed DOM and can request every matching recipe', () => {
+  const catalog=Array.from({length:80},(_,index)=>({...detailedRecipe,id:`v2-${index}`,name:`食谱${index}`}));
+  const initial=mealsView({recipes:catalog,stage:'stage4',recipeBrowser:{stage:'stage4',query:'',chewingLevel:'all',fingerFood:'all',limit:24}});
+  assert.equal((initial.match(/class="recipe-card/g)||[]).length,24);
+  assert.ok((initial.match(/<section>/g)||[]).length<250);
+  assert.match(initial,/data-action="load-more-recipes"/);
+  assert.match(initial,/显示 24 \/ 80/);
+  const all=mealsView({recipes:catalog,stage:'stage4',recipeBrowser:{stage:'stage4',query:'',chewingLevel:'all',fingerFood:'all',limit:80}});
+  assert.equal((all.match(/class="recipe-card/g)||[]).length,80);
+  assert.doesNotMatch(all,/data-action="load-more-recipes"/);
+});
+
+test('recipe browser restores controlled filter values after a refresh render', () => {
+  const html=mealsView({recipes:[detailedRecipe],stage:'stage4',recipeBrowser:{stage:'all',query:'南瓜',chewingLevel:'beginner-chewing',fingerFood:'yes',limit:24}});
+  assert.match(html,/id="recipe-search"[^>]*value="南瓜"/);
+  assert.match(html,/option value="all" selected>全部阶段/);
+  assert.match(html,/option value="beginner-chewing" selected>咀嚼入门/);
+  assert.match(html,/option value="yes" selected>手指食物/);
+});
+
+test('application owns recipe filter and paging state across refresh renders', async () => {
+  const app=await readFile('src/app.js','utf8');
+  assert.match(app,/let recipeBrowser=\{stage:null,query:'',chewingLevel:'all',fingerFood:'all',limit:24\}/);
+  assert.match(app,/mealsView\(\{[^}]*recipeBrowser\}\)/);
+  assert.match(app,/recipeBrowser=readRecipeFilters\(\)/);
+  assert.match(app,/recipeBrowser=\{\.\.\.recipeBrowser,limit:recipeBrowser\.limit\+24\}/);
+  assert.doesNotMatch(app,/Number\(button\.dataset\.id\)/);
+});
+
+test('malformed legacy recipe arrays never throw or inject markup', () => {
+  const malformed={id:'legacy-x',name:'旧食谱',stage:'stage4',ingredients:[null,{bad:'<img src=x>'},'<script>alert(1)</script>'],steps:[null,{bad:'<b>'}],substitutions:[{}],mealSlots:[null]};
+  assert.doesNotThrow(()=>mealsView({recipes:[malformed],stage:'stage4'}));
+  const html=mealsView({recipes:[malformed],stage:'stage4'});
+  assert.doesNotMatch(html,/<script>|<img|<b>/);
+  assert.match(html,/&lt;script&gt;alert\(1\)&lt;\/script&gt;/);
 });
 
 test('records screen preserves stable record management controls', () => {

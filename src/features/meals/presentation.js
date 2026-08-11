@@ -5,7 +5,8 @@ export function cleanRecipeName(name=''){
 }
 
 export function mealSummary(recipe={}){
-  const amounts=(recipe.ingredients||[])
+  const amounts=(Array.isArray(recipe.ingredients)?recipe.ingredients:[])
+    .filter(item=>typeof item==='string')
     .filter(item=>!item.includes('适量')&&!item.includes('可作为'))
     .filter(item=>/\d|克|毫升|(?:^|\s)(?:g|ml)(?:\s|$)/i.test(item))
     .slice(0,2)
