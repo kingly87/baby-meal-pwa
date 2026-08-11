@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { MemoryRepository } from '../src/db.js';
-import { loadApplicationModel, bindOnboardingActions, ensureDailySchedule, recalculateScheduleForSleep, loadDailyTrend, createTrendState, loadRenderData, runRefreshCycle, createRefreshCoordinator, syncNotifiedTasks } from '../src/app.js';
+import { loadApplicationModel, bindOnboardingActions, ensureDailySchedule, recalculateScheduleForSleep, loadDailyTrend, createTrendState, loadRenderData, runRefreshCycle, createRefreshCoordinator, createAsyncEpoch, runNotificationSchedule, syncNotifiedTasks } from '../src/app.js';
 import { createDefaultTemplate } from '../src/features/schedule/template.js';
 import { createBackup } from '../src/features/backup/backup.js';
 import { AppStore } from '../src/store.js';
@@ -296,4 +296,27 @@ test('notification id sync clears stale backup ids and loads restored ids in pla
   assert.equal(ids,same); assert.deepEqual([...ids],['new-a','new-b']);
   syncNotifiedTasks(ids,{notifiedTaskIds:[]});
   assert.deepEqual([...ids],[]);
+});
+
+test('data replacement invalidates an older notification scheduler before it can send or write',async()=>{
+  let releaseSettings;const settingsReady=new Promise(resolve=>{releaseSettings=resolve}),sent=[],writes=[];
+  const repository={get:async()=>settingsReady,list:async()=>[],put:async(...args)=>writes.push(args)};
+  const epoch=createAsyncEpoch(),notifiedTasks=new Set(['old-id']),isCurrent=epoch.capture();
+  const older=runNotificationSchedule({repository,babyId:'b1',tasks:[{id:'milk',title:'喝奶',plannedAt:'2026-08-11T08:00:00Z',status:'upcoming'}],notifiedTasks,registration:{showNotification:async title=>sent.push(title)},isCurrent,now:'2026-08-11T09:00:00Z'});
+
+  epoch.invalidate();
+  releaseSettings({id:'global',activeBabyId:'b1',notificationsEnabled:true,notifiedTaskIds:['restored-id']});
+  await older;
+
+  assert.deepEqual(sent,[]);
+  assert.deepEqual(writes,[]);
+  assert.deepEqual([...notifiedTasks],['old-id']);
+});
+
+test('onboarding restore invalidates async work before storage replacement starts',async()=>{
+  const repo=new MemoryRepository(),fake=onboardingDocument(),order=[];
+  fake.input.files=[{text:async()=>'{"backup":true}'}];
+  bindOnboardingActions(fake.document,{repository:repo,saveOnboarding:async()=>{},beforeRestore:()=>order.push('invalidate'),restore:async()=>{order.push('restore');return{babyCount:0,recordCount:0}},loadModel:async()=>({store:{}}),onRestored:async()=>order.push('start'),notify:()=>{}});
+  await fake.input.onchange({target:fake.input});
+  assert.deepEqual(order,['invalidate','restore','start']);
 });
