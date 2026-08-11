@@ -19,9 +19,9 @@ test('renders the approved single metric controls and accessible bars',()=>{
   assert.match(html,/data-trend-metric="milk"[^>]*aria-pressed="false"/);
   assert.match(html,/data-trend-days="7"[^>]*aria-pressed="true"/);
   assert.match(html,/data-trend-days="14"[^>]*aria-pressed="false"/);
-  assert.match(html,/role="img"[^>]*aria-label="睡眠最近 7 天趋势图"/);
-  assert.match(html,/<svg[^>]*class="trend-chart"/);
-  assert.match(html,/<g class="trend-bar"[^>]*tabindex="0"/);
+  assert.match(html,/<svg[^>]*class="trend-chart"[^>]*role="group"[^>]*aria-label="睡眠最近 7 天趋势图"/);
+  assert.match(html,/<g class="trend-bar"[^>]*tabindex="0"[^>]*role="img"/);
+  assert.doesNotMatch(html,/role="graphics-symbol"/);
   assert.match(html,/<rect class="trend-hit-target"[^>]*width="44"/);
   assert.match(html,/<title>8月1日，11 小时<\/title>/);
   assert.match(html,/aria-label="8月1日，11 小时"/);
