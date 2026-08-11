@@ -20,6 +20,10 @@ test('renders the approved single metric controls and accessible bars',()=>{
   assert.match(html,/data-trend-days="7"[^>]*aria-pressed="true"/);
   assert.match(html,/data-trend-days="14"[^>]*aria-pressed="false"/);
   assert.match(html,/role="img"[^>]*aria-label="睡眠最近 7 天趋势图"/);
+  assert.match(html,/<svg[^>]*class="trend-chart"/);
+  assert.match(html,/<g class="trend-bar"[^>]*tabindex="0"/);
+  assert.match(html,/<rect class="trend-hit-target"[^>]*width="44"/);
+  assert.match(html,/<title>8月1日，11 小时<\/title>/);
   assert.match(html,/aria-label="8月1日，11 小时"/);
   assert.match(html,/aria-label="8月2日，无数据"[^>]*data-missing="true"/);
   assert.match(html,/aria-label="8月3日，0 小时"[^>]*data-missing="false"/);
@@ -36,7 +40,7 @@ test('shows average and signed period delta with the selected unit',()=>{
 
 test('handles all-zero, malformed and hostile input without crashing or injecting markup',()=>{
   const zero=dailyTrendChart({...model,metric:'urine',unit:'次',average:0,delta:null,points:[{date:'2026-08-01',value:0,hasData:true}]});
-  assert.match(zero,/height:0%/);
+  assert.match(zero,/class="trend-bar-fill"[^>]*height="0"/);
   assert.doesNotMatch(zero,/NaN|Infinity/);
   const malformed=dailyTrendChart({metric:'<img src=x onerror=alert(1)>',days:999,unit:'<b>x<\/b>',points:[null,{date:'<x>',value:'bad',hasData:true}]});
   assert.doesNotMatch(malformed,/<img|<b>|<x>/);
@@ -47,13 +51,14 @@ test('handles all-zero, malformed and hostile input without crashing or injectin
 test('limits dense date labels while retaining every bar',()=>{
   const points=Array.from({length:30},(_,index)=>({date:`2026-08-${String(index+1).padStart(2,'0')}`,value:index,hasData:true}));
   const html=dailyTrendChart({...model,days:30,points});
-  assert.equal((html.match(/class="trend-bar"/g)||[]).length,30);
+  assert.equal((html.match(/<g class="trend-bar"/g)||[]).length,30);
   assert.ok((html.match(/class="trend-date"/g)||[]).length<=7);
-  assert.equal((html.match(/aria-label="8月/g)||[]).length,30);
+  assert.equal((html.match(/<title>8月/g)||[]).length,30);
+  assert.match(html,/width="1320"/);
 });
 
 test('uses phone-safe wrapping, scroll containment and non-color missing marks',async()=>{
   const css=await readFile('assets/styles/app.css','utf8');
-  for(const token of ['overflow-x:auto','max-width:380px','.trend-missing-mark','border:1px dashed','.visually-hidden'])assert.ok(css.includes(token),token);
+  for(const token of ['overflow-x:auto','max-width:380px','.trend-missing-mark','stroke-dasharray','.visually-hidden'])assert.ok(css.includes(token),token);
   assert.match(css,/\.trend-metrics\{grid-template-columns:repeat\(2,minmax\(0,1fr\)\)/);
 });
