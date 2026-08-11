@@ -31,6 +31,26 @@ test('rejects orphaned records without writing application settings', async () =
   assert.deepEqual(await repo.get('appSettings','global'),settings);
 });
 
+test('rejects malformed baby records even when their babyId is valid', async () => {
+  const settings={id:'global',activeBabyId:'b1',dataVersion:1,theme:'warm'};
+  const repo=new MemoryRepository({
+    babies:[{id:'b1',name:'多米'}],
+    dailyRecords:[{id:'r1',babyId:'b1',type:'milk',value:'bad',occurredAt:'2026-08-01T08:00:00.000Z'}],
+    appSettings:[settings]
+  });
+
+  await assert.rejects(auditAndMarkV2(repo),/dailyRecords/);
+  assert.deepEqual(await repo.get('appSettings','global'),settings);
+});
+
+test('rejects a global activeBabyId that does not identify an existing baby', async () => {
+  const settings={id:'global',activeBabyId:'missing',dataVersion:1,theme:'warm'};
+  const repo=new MemoryRepository({babies:[{id:'b1',name:'多米'}],appSettings:[settings]});
+
+  await assert.rejects(auditAndMarkV2(repo),/设置无效|appSettings/);
+  assert.deepEqual(await repo.get('appSettings','global'),settings);
+});
+
 test('preserves existing global application setting fields when marking V2', async () => {
   const repo=new MemoryRepository({
     babies:[{id:'b1',name:'多米'}],
