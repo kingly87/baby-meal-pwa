@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { MemoryRepository } from '../src/db.js';
-import { loadApplicationModel, bindOnboardingActions, ensureDailySchedule, recalculateScheduleForSleep, loadDailyTrend, createTrendState, loadRenderData } from '../src/app.js';
+import { loadApplicationModel, bindOnboardingActions, ensureDailySchedule, recalculateScheduleForSleep, loadDailyTrend, createTrendState, loadRenderData, runRefreshCycle } from '../src/app.js';
 import { createDefaultTemplate } from '../src/features/schedule/template.js';
 import { createBackup } from '../src/features/backup/backup.js';
 import { AppStore } from '../src/store.js';
@@ -251,4 +251,22 @@ test('refresh snapshot reuses AppStore babies tasks and menus without duplicate 
   const result=await loadRenderData(repo,{seed:{babies:store.babies,taskInstances:store.allTasks,weeklyMenus:store.weeks}});
   assert.equal(result.data.taskInstances.length,1);
   for(const name of['babies','taskInstances','weeklyMenus'])assert.equal(counts.get(name),1,name);
+});
+
+test('real refresh cycle shares settings and reminders with enabled notification scheduling',async()=>{
+  const counts=new Map(),base=new MemoryRepository({
+    babies:[{id:'b1',name:'多米'}],
+    appSettings:[{id:'global',activeBabyId:'b1',notificationsEnabled:true}],
+    reminders:[{id:'r1',babyId:'b1',title:'体检',dueDate:'2026-08-12',completedAt:null}],
+    taskInstances:[],weeklyMenus:[]
+  });
+  const count=(method,store)=>counts.set(store,(counts.get(store)||0)+1);
+  const repo={list:async(...args)=>{count('list',args[0]);return base.list(...args)},get:async(...args)=>{count('get',args[0]);return base.get(...args)}};
+  const store=new AppStore(repo,{now:()=>new Date('2026-08-12T08:00:00+08:00')});
+  let rendered=false,scheduled=false;
+  await runRefreshCycle({store,repository:repo,render:async snapshot=>{rendered=snapshot.data.babies.length===1},schedule:async snapshot=>{scheduled=snapshot.data.appSettings[0].notificationsEnabled&&snapshot.data.reminders.length===1}});
+  assert.equal(rendered,true); assert.equal(scheduled,true);
+  for(const[name,count]of counts)assert.ok(count<=1,`${name} read ${count} times`);
+  assert.equal(counts.get('appSettings'),1);
+  assert.equal(counts.get('reminders'),1);
 });

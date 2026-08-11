@@ -2,14 +2,14 @@ import { localDateKey } from './core/dates.js';
 
 export class AppStore {
   constructor(repository,{now=()=>new Date()}={}) {
-    this.repo=repository; this.now=now; this.babies=[]; this.activeBabyId=null;
+    this.repo=repository; this.now=now; this.babies=[]; this.settings=null; this.activeBabyId=null;
     this.tasks=[]; this.allTasks=[]; this.week=null; this.weeks=[]; this.timeline=[];
   }
   get activeBaby() { return this.babies.find(baby=>baby.id===this.activeBabyId)||this.babies[0]||null; }
   async load() {
     this.babies=await this.repo.list('babies');
-    const setting=await this.repo.get('appSettings','global');
-    this.activeBabyId=setting?.activeBabyId||this.babies[0]?.id||null;
+    this.settings=await this.repo.get('appSettings','global');
+    this.activeBabyId=this.settings?.activeBabyId||this.babies[0]?.id||null;
     if(this.activeBabyId) {
       const today=localDateKey(this.now());
       this.allTasks=await this.repo.list('taskInstances',{babyId:this.activeBabyId});
