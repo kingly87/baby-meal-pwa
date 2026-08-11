@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { recipes } from '../data/recipes.js';
+import { curatedStage4Rows } from '../data/stage4-recipes-v2-rows.js';
 import { validateChewingRecipe } from '../src/features/meals/recipe-details.js';
 
 test('recipe catalog contains 780 unique complete recipes', () => {
@@ -74,6 +75,32 @@ test('new chewing recipes are curated records rather than a cartesian or single-
     if (/软饼/.test(recipe.staple)) assert.match(recipe.cookingMethod,/小火|薄铺/,recipe.name);
     if (/饺子|馄饨/.test(recipe.staple)) assert.match(recipe.cookingMethod,/煮/,recipe.name);
     if (/肉丸|鱼饼/.test(recipe.texture)) assert.match(recipe.cookingMethod,/剁细|扁椭圆/,recipe.name);
+  }
+});
+
+test('curated form blocks do not hide short-period amount, shape or method rotations', () => {
+  const blocks=new Map();
+  for (const row of curatedStage4Rows) {
+    const key=`${row[6]}|${row[7]}`;
+    if (!blocks.has(key)) blocks.set(key,[]);
+    blocks.get(key).push(row);
+  }
+  const minimumPeriod=values=>{
+    for (let period=1;period<=values.length;period+=1) {
+      if (values.every((value,index)=>value===values[index%period])) return period;
+    }
+    return values.length;
+  };
+  const singleMethodForms=new Set(['薄皮软饺子','薄皮小馄饨','松软肉丸','无刺软鱼饼']);
+  const singleShapeForms=new Set(['碎软面','软煮意面']);
+  for (const [form,rows] of blocks) {
+    assert.equal(rows.length,12,form);
+    const proteinGrams=rows.map(row=>row[12]);
+    const vegetableGrams=rows.map(row=>row[13]);
+    assert.ok(minimumPeriod(proteinGrams)>6,`${form} protein amounts repeat every ${minimumPeriod(proteinGrams)}`);
+    assert.ok(minimumPeriod(vegetableGrams)>6,`${form} vegetable amounts repeat every ${minimumPeriod(vegetableGrams)}`);
+    if (!singleShapeForms.has(rows[0][6])) assert.ok(minimumPeriod(rows.map(row=>row[14]))>6,`${form} shapes use a short rotation`);
+    if (!singleMethodForms.has(rows[0][6])) assert.ok(minimumPeriod(rows.map(row=>row[11]))>6,`${form} methods use a short rotation`);
   }
 });
 
