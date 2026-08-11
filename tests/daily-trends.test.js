@@ -53,6 +53,12 @@ test('clips an active sleep at now and ignores future, invalid and duplicate sou
   assert.equal(dailyTrendModel({records,sleeps,metric:'stool',days:7,endDate:'2026-08-02',now}).points.at(-1).hasData,false);
 });
 
+test('rejects an explicitly future sleep end instead of treating it as active',()=>{
+  const sleeps=[{id:'future-end',startAt:'2026-08-02T10:00:00+08:00',endAt:'2026-08-02T13:00:00+08:00'}];
+  const point=dailyTrendModel({records:[],sleeps,metric:'sleep',days:7,endDate:'2026-08-02',now}).points.at(-1);
+  assert.deepEqual({value:point.value,hasData:point.hasData},{value:0,hasData:false});
+});
+
 test('calendar buckets remain continuous across a daylight-saving transition',()=>{
   const previousTZ=process.env.TZ;
   process.env.TZ='America/New_York';

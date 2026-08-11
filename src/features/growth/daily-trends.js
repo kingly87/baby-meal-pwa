@@ -58,9 +58,9 @@ function sleepTotals(sleeps,keys,nowMs){
   const totals=new Map(keys.map(key=>[key,{value:0,hasData:false}]));
   for(const session of uniqueById(sleeps)){
     const startMs=new Date(session.startAt).getTime();
-    const suppliedEnd=session.endAt==null?nowMs:new Date(session.endAt).getTime();
-    if(!Number.isFinite(startMs)||!Number.isFinite(suppliedEnd)||startMs>=suppliedEnd||startMs>=nowMs)continue;
-    const endMs=Math.min(suppliedEnd,nowMs);
+    const active=session.endAt==null;
+    const endMs=active?nowMs:new Date(session.endAt).getTime();
+    if(!Number.isFinite(startMs)||!Number.isFinite(endMs)||startMs>=endMs||startMs>=nowMs||!active&&endMs>nowMs)continue;
     for(const key of keys){
       const dayStart=new Date(`${key}T00:00:00`),dayEnd=new Date(dayStart);
       dayEnd.setDate(dayEnd.getDate()+1);
