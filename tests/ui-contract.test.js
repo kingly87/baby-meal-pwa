@@ -8,7 +8,7 @@ import { mealsView, recipeMatchesFilters } from '../src/ui/meals.js';
 import { growthView, chartSvg } from '../src/ui/growth.js';
 import { recordsView } from '../src/ui/records.js';
 import { formatDateTimeLocal } from '../src/app.js';
-import { openActionDialog, runDialogSubmit } from '../src/ui/dialogs.js';
+import { openActionDialog, guardedDialogClose, runDialogSubmit } from '../src/ui/dialogs.js';
 
 function fakeDialogDocument(){
   class Node extends EventTarget{
@@ -78,18 +78,38 @@ test('count edit dialog exposes integer count, time, note and async error handli
 });
 
 test('async dialog submit locks during storage and keeps the dialog open on failure', async () => {
-  const submit={disabled:false},error={hidden:true,textContent:''},closed=[];
+  const submit={disabled:false},cancel={disabled:false},error={hidden:true,textContent:''},closed=[];
+  const wrap={dataset:{},attributes:{},setAttribute(name,value){this.attributes[name]=value},removeAttribute(name){delete this.attributes[name]}};
+  const close=guardedDialogClose(wrap,value=>closed.push(value));
   let rejectWrite;
-  const pending=runDialogSubmit({submit,error,values:{value:'1'},close:value=>closed.push(value),onSubmit:()=>new Promise((resolve,reject)=>{rejectWrite=reject})});
+  const pending=runDialogSubmit({wrap,submit,cancel,error,values:{value:'1'},close,onSubmit:()=>new Promise((resolve,reject)=>{rejectWrite=reject})});
   assert.equal(submit.disabled,true);
-  const duplicate=await runDialogSubmit({submit,error,values:{value:'1'},close:value=>closed.push(value),onSubmit:async()=>{throw new Error('不应执行')}});
+  assert.equal(cancel.disabled,true);
+  assert.equal(wrap.dataset.pending,'true');
+  assert.equal(wrap.attributes['aria-busy'],'true');
+  assert.equal(close(null),false);
+  assert.deepEqual(closed,[]);
+  const duplicate=await runDialogSubmit({wrap,submit,cancel,error,values:{value:'1'},close,onSubmit:async()=>{throw new Error('不应执行')}});
   assert.equal(duplicate,false);
   rejectWrite(new Error('保存失败'));
   assert.equal(await pending,false);
   assert.equal(submit.disabled,false);
+  assert.equal(cancel.disabled,false);
+  assert.equal(wrap.dataset.pending,undefined);
+  assert.equal(wrap.attributes['aria-busy'],undefined);
   assert.equal(error.hidden,false);
   assert.equal(error.textContent,'保存失败');
   assert.deepEqual(closed,[]);
+  assert.equal(close(null),true);
+  assert.deepEqual(closed,[null]);
+});
+
+test('successful async dialog submission closes once after the pending lock', async () => {
+  const submit={disabled:false},cancel={disabled:false},error={hidden:true,textContent:''},closed=[];
+  const wrap={dataset:{},setAttribute(){},removeAttribute(){}};
+  const close=guardedDialogClose(wrap,value=>closed.push(value));
+  assert.equal(await runDialogSubmit({wrap,submit,cancel,error,values:{value:'2'},close,onSubmit:async values=>({...values,saved:true})}),true);
+  assert.deepEqual(closed,[{value:'2',saved:true}]);
 });
 
 test('five today quick actions stay uniform at phone widths', async () => {
