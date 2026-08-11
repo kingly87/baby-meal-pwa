@@ -1,6 +1,6 @@
 import { localDateKey } from '../../core/dates.js';
 
-const METRICS={sleep:{unit:'分钟'},milk:{unit:'ml'},stool:{unit:'次'},urine:{unit:'次'}};
+const METRICS={sleep:{unit:'小时'},milk:{unit:'ml'},stool:{unit:'次'},urine:{unit:'次'}};
 const RANGES=new Set([7,14,30]);
 
 function localDay(dateKey){
@@ -71,7 +71,6 @@ function sleepTotals(sleeps,keys,nowMs){
       point.hasData=true;
     }
   }
-  for(const point of totals.values())point.value=Math.round(point.value);
   return totals;
 }
 
@@ -83,7 +82,11 @@ function average(points){
 
 function pointsFor({records,sleeps,metric,keys,nowMs}){
   const totals=metric==='sleep'?sleepTotals(sleeps,keys,nowMs):recordTotals(records,metric,keys,nowMs);
-  return keys.map(date=>({date,...totals.get(date)}));
+  return keys.map(date=>{
+    const point=totals.get(date);
+    const value=metric==='sleep'?point.value/60:point.value;
+    return{date,value,hasData:point.hasData};
+  });
 }
 
 export function dailyTrendModel({records=[],sleeps=[],metric='sleep',days=7,endDate,now=new Date()}={}){
@@ -91,13 +94,16 @@ export function dailyTrendModel({records=[],sleeps=[],metric='sleep',days=7,endD
   if(!RANGES.has(days))throw new Error('趋势范围只能是 7、14 或 30 天');
   const nowDate=new Date(now),nowMs=nowDate.getTime();
   if(!Number.isFinite(nowMs))throw new Error('当前时间无效');
-  const lastDate=endDate||localDateKey(nowDate);
+  const nowDateKey=localDateKey(nowDate),requestedEndDate=endDate||nowDateKey;
+  localDay(requestedEndDate);
+  const lastDate=requestedEndDate>nowDateKey?nowDateKey:requestedEndDate;
   const currentKeys=dateRange(lastDate,days);
   const previousKeys=dateRange(shiftDate(currentKeys[0],-1),days);
   const source={records:Array.isArray(records)?records:[],sleeps:Array.isArray(sleeps)?sleeps:[],metric,nowMs};
-  const points=pointsFor({...source,keys:currentKeys});
+  const rawPoints=pointsFor({...source,keys:currentKeys});
   const previousPoints=pointsFor({...source,keys:previousKeys});
-  const currentAverage=average(points),previousAverage=average(previousPoints);
+  const currentAverage=average(rawPoints),previousAverage=average(previousPoints);
   const delta=currentAverage==null||previousAverage==null?null:Math.round((currentAverage-previousAverage)*100)/100;
+  const points=rawPoints.map(point=>({...point,value:Math.round(point.value*100)/100}));
   return{metric,days,unit:METRICS[metric].unit,points,average:currentAverage,previousAverage,delta};
 }

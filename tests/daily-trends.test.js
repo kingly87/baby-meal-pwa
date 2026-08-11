@@ -11,7 +11,7 @@ test('aggregates records and splits sleep across local calendar days',()=>{
     {id:'s1',type:'stool',value:2,occurredAt:'2026-08-01T13:00:00+08:00'},
     {id:'u1',type:'urine',occurredAt:'2026-08-02T09:00:00+08:00'}
   ],sleeps:[{id:'sleep1',startAt:'2026-08-01T23:00:00+08:00',endAt:'2026-08-02T02:00:00+08:00'}]};
-  assert.deepEqual(dailyTrendModel({...source,metric:'sleep',days:7,endDate:'2026-08-02',now}).points.slice(-2).map(x=>x.value),[60,120]);
+  assert.deepEqual(dailyTrendModel({...source,metric:'sleep',days:7,endDate:'2026-08-02',now}).points.slice(-2).map(x=>x.value),[1,2]);
   assert.equal(dailyTrendModel({...source,metric:'milk',days:7,endDate:'2026-08-02',now}).points.at(-2).value,270);
   assert.equal(dailyTrendModel({...source,metric:'stool',days:7,endDate:'2026-08-02',now}).points.at(-2).value,2);
   assert.equal(dailyTrendModel({...source,metric:'urine',days:7,endDate:'2026-08-02',now}).points.at(-1).value,1);
@@ -49,7 +49,7 @@ test('clips an active sleep at now and ignores future, invalid and duplicate sou
     {id:'invalid',startAt:'not-a-date',endAt:null}
   ];
   assert.equal(dailyTrendModel({records,sleeps,metric:'milk',days:7,endDate:'2026-08-02',now}).points.at(-1).value,80);
-  assert.equal(dailyTrendModel({records,sleeps,metric:'sleep',days:7,endDate:'2026-08-02',now}).points.at(-1).value,90);
+  assert.equal(dailyTrendModel({records,sleeps,metric:'sleep',days:7,endDate:'2026-08-02',now}).points.at(-1).value,1.5);
   assert.equal(dailyTrendModel({records,sleeps,metric:'stool',days:7,endDate:'2026-08-02',now}).points.at(-1).hasData,false);
 });
 
@@ -59,13 +59,52 @@ test('rejects an explicitly future sleep end instead of treating it as active',(
   assert.deepEqual({value:point.value,hasData:point.hasData},{value:0,hasData:false});
 });
 
+test('exposes sleep values and comparison statistics in hours rounded to two decimals',()=>{
+  const sleeps=[
+    {id:'previous',startAt:'2026-07-26T00:00:00+08:00',endAt:'2026-07-26T11:00:00+08:00'},
+    {id:'eleven',startAt:'2026-08-01T00:00:00+08:00',endAt:'2026-08-01T11:00:00+08:00'},
+    {id:'twelve',startAt:'2026-08-02T00:00:00+08:00',endAt:'2026-08-02T12:00:00+08:00'}
+  ];
+  const model=dailyTrendModel({records:[],sleeps,metric:'sleep',days:7,endDate:'2026-08-02',now:'2026-08-02T12:00:00+08:00'});
+  assert.equal(model.unit,'小时');
+  assert.deepEqual(model.points.slice(-2).map(x=>x.value),[11,12]);
+  assert.deepEqual({average:model.average,previousAverage:model.previousAverage,delta:model.delta},{average:11.5,previousAverage:11,delta:.5});
+});
+
+test('keeps fractional sleep precision until the final hour conversion',()=>{
+  const sleeps=[
+    {id:'a',startAt:'2026-08-01T23:45:15+08:00',endAt:'2026-08-02T00:15:15+08:00'},
+    {id:'b',startAt:'2026-08-02T00:15:15+08:00',endAt:'2026-08-02T00:30:15+08:00'}
+  ];
+  const model=dailyTrendModel({records:[],sleeps,metric:'sleep',days:7,endDate:'2026-08-02',now});
+  assert.deepEqual(model.points.slice(-2).map(x=>x.value),[.25,.5]);
+});
+
+test('computes sleep averages before rounding individual displayed days',()=>{
+  const sleeps=[
+    {id:'short-a',startAt:'2026-08-01T00:00:00.000+08:00',endAt:'2026-08-01T00:00:50.400+08:00'},
+    {id:'short-b',startAt:'2026-08-02T00:00:00.000+08:00',endAt:'2026-08-02T00:00:54.000+08:00'}
+  ];
+  const model=dailyTrendModel({records:[],sleeps,metric:'sleep',days:7,endDate:'2026-08-02',now});
+  assert.deepEqual(model.points.slice(-2).map(x=>x.value),[.01,.02]);
+  assert.equal(model.average,.01);
+});
+
+test('clamps a future end date to the local date at now without hiding todays records',()=>{
+  const records=[{id:'today',type:'milk',value:120,occurredAt:'2026-08-02T08:00:00+08:00'}];
+  const model=dailyTrendModel({records,sleeps:[],metric:'milk',days:7,endDate:'2026-08-20',now});
+  assert.equal(model.points.at(-1).date,'2026-08-02');
+  assert.deepEqual(model.points.at(-1),{date:'2026-08-02',value:120,hasData:true});
+  assert.throws(()=>dailyTrendModel({records:[],sleeps:[],metric:'milk',days:7,endDate:'2026-02-30',now}),/日期无效/);
+});
+
 test('calendar buckets remain continuous across a daylight-saving transition',()=>{
   const previousTZ=process.env.TZ;
   process.env.TZ='America/New_York';
   try{
     const model=dailyTrendModel({records:[],sleeps:[{id:'dst',startAt:'2026-03-08T00:00:00-05:00',endAt:'2026-03-09T00:00:00-04:00'}],metric:'sleep',days:7,endDate:'2026-03-09',now:'2026-03-09T12:00:00-04:00'});
     assert.deepEqual(model.points.slice(-3).map(x=>x.date),['2026-03-07','2026-03-08','2026-03-09']);
-    assert.equal(model.points.at(-2).value,23*60);
+    assert.equal(model.points.at(-2).value,23);
   }finally{
     if(previousTZ===undefined)delete process.env.TZ;
     else process.env.TZ=previousTZ;
