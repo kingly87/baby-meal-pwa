@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { MemoryRepository } from '../src/db.js';
-import { loadApplicationModel, bindOnboardingActions, ensureDailySchedule, recalculateScheduleForSleep, loadDailyTrend, createTrendState, loadRenderData, runRefreshCycle, createRefreshCoordinator, createAsyncEpoch, runNotificationSchedule, syncNotifiedTasks } from '../src/app.js';
+import { loadApplicationModel, bindOnboardingActions, ensureDailySchedule, recalculateScheduleForSleep, loadDailyTrend, createTrendState, loadRenderData, runRefreshCycle, createRefreshCoordinator, createAsyncEpoch, runNotificationSchedule, runDataReplacement, changeNotificationScheduling, syncNotifiedTasks } from '../src/app.js';
 import { createDefaultTemplate } from '../src/features/schedule/template.js';
 import { createBackup } from '../src/features/backup/backup.js';
 import { AppStore } from '../src/store.js';
@@ -319,4 +319,39 @@ test('onboarding restore invalidates async work before storage replacement start
   bindOnboardingActions(fake.document,{repository:repo,saveOnboarding:async()=>{},beforeRestore:()=>order.push('invalidate'),restore:async()=>{order.push('restore');return{babyCount:0,recordCount:0}},loadModel:async()=>({store:{}}),onRestored:async()=>order.push('start'),notify:()=>{}});
   await fake.input.onchange({target:fake.input});
   assert.deepEqual(order,['invalidate','restore','start']);
+});
+
+test('successful replacement stays suspended through refresh then schedules only the new baby',async()=>{
+  const epoch=createAsyncEpoch(),events=[];let babyId='old',releaseRefresh;
+  const refreshReady=new Promise(resolve=>{releaseRefresh=()=>{babyId='new';resolve()}});
+  const replacing=runDataReplacement({epoch,invalidateRefresh:()=>events.push('invalidate'),clearTimer:()=>events.push('clear'),replace:async()=>events.push('replace'),sync:async()=>events.push('sync'),refresh:async()=>{events.push('refresh');await refreshReady},schedule:async()=>events.push(`schedule:${babyId}`)});
+  await Promise.resolve();await Promise.resolve();
+  if(epoch.capture()())events.push(`focus:${babyId}`);
+  releaseRefresh();await replacing;
+  assert.deepEqual(events,['invalidate','clear','replace','sync','refresh','schedule:new']);
+});
+
+test('failed replacement resumes and explicitly rearms notification scheduling',async()=>{
+  const epoch=createAsyncEpoch(),events=[];
+  await assert.rejects(runDataReplacement({epoch,invalidateRefresh:()=>events.push('invalidate'),clearTimer:()=>events.push('clear'),replace:async()=>{throw new Error('导入失败')},sync:async()=>events.push('sync'),refresh:async()=>events.push('refresh'),schedule:async()=>events.push('schedule')}),/导入失败/);
+  assert.equal(epoch.capture()(),true);
+  assert.deepEqual(events,['invalidate','clear','schedule']);
+});
+
+test('disabling notifications invalidates an in-flight scheduler before its late write or rearm',async()=>{
+  let releaseSettings;const settingsReady=new Promise(resolve=>{releaseSettings=resolve}),writes=[],rearms=[];
+  const epoch=createAsyncEpoch(),guard=epoch.capture(),notifiedTasks=new Set();
+  const old=runNotificationSchedule({repository:{get:async()=>settingsReady,list:async()=>[],put:async(...args)=>writes.push(args)},babyId:'old',tasks:[],notifiedTasks,registration:{},isCurrent:guard});
+  await changeNotificationScheduling({enabled:false,epoch,clearTimer:()=>{},persist:async enabled=>writes.push(['disabled',enabled]),schedule:async()=>rearms.push('schedule')});
+  releaseSettings({id:'global',notificationsEnabled:true});await old;
+  assert.deepEqual(writes,[['disabled',false]]);
+  assert.deepEqual(rearms,[]);
+  assert.equal(epoch.capture()(),false);
+});
+
+test('reenabling notifications resumes and explicitly schedules once',async()=>{
+  const epoch=createAsyncEpoch(),events=[];epoch.invalidate();
+  await changeNotificationScheduling({enabled:true,epoch,clearTimer:()=>events.push('clear'),persist:async enabled=>events.push(`persist:${enabled}`),schedule:async()=>events.push('schedule')});
+  assert.equal(epoch.capture()(),true);
+  assert.deepEqual(events,['clear','persist:true','schedule']);
 });
