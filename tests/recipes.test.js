@@ -129,7 +129,7 @@ test('chewing recipes encode safe shapes, textures and allergen-aware preparatio
     assert.doesNotMatch(text,forbidden,recipe.name);
     assert.match(recipe.softnessTest,/拇指|手指|压碎/,recipe.name);
     if (/鱼|鳕|鲈|三文鱼/.test(`${recipe.group}|${recipe.protein}`)) assert.match(recipe.steps.join('|'),/去刺/,recipe.name);
-    if (/肉|鸡|牛|猪/.test(`${recipe.group}|${recipe.protein}`)) assert.match(recipe.steps.join('|'),/无骨|切碎|剁/,recipe.name);
+    if (/肉|牛|猪|鸡(?:肉|腿|胸)/.test(`${recipe.group}|${recipe.protein}`)) assert.match(recipe.steps.join('|'),/无骨|切碎|剁/,recipe.name);
     if (/花生|坚果/.test(recipe.ingredients.join('|'))) assert.ok(recipe.allergens.some(item => /花生|坚果/.test(item)),recipe.name);
     if (/蛋|蒸蛋/.test(`${recipe.protein}|${recipe.staple}`)) assert.ok(recipe.allergens.includes('蛋'),recipe.name);
     if (recipe.allergens.includes('蛋')) assert.match(recipe.ingredients.join('|'),/蛋/,recipe.name);
@@ -144,5 +144,43 @@ test('chewing recipes encode safe shapes, textures and allergen-aware preparatio
       if (recipe.allergens.includes(allergen)) assert.match(ingredientText,source,`${recipe.name}: ${allergen} has no ingredient source`);
     }
     assert.doesNotMatch(recipe.steps.join('|'),/第\d+种处理|方法\d+/,recipe.name);
+  }
+});
+
+test('egg recipes never receive meat-only deboning instructions', () => {
+  const eggRecipes=recipes.filter(recipe => recipe.stage==='stage4' && /蛋/.test(recipe.protein));
+  assert.ok(eggRecipes.length>0);
+  for (const recipe of eggRecipes) assert.doesNotMatch(recipe.steps.join('|'),/选无骨部位/,recipe.name);
+});
+
+test('every chewing staple has an independently declared measured ingredient source', () => {
+  const expectedStapleSources=new Map([
+    ['软烂焖饭',/熟软米饭/],['宝宝意面',/小麦意面/],['迷你饺子',/小麦饺子皮/],['软嫩肉丸',null],
+    ['软饭团',/熟软米饭/],['蒸蛋羹',/鸡蛋液/],['软乌冬',/小麦乌冬面/],['杂蔬烩饭',/熟软米饭/],
+    ['蒸软手指蔬菜',null],['杂蔬蒸糕',/低筋小麦面粉/],['谷物软饼',/小麦面粉/],['软米饭团',/熟软米饭/],
+    ['碎软面',/小麦面条/],['软煮意面',/小麦意面/],['薄皮软饺子',/小麦饺子皮/],['薄皮小馄饨',/小麦馄饨皮/],
+    ['松软肉丸',null],['无刺软鱼饼',null],['嫩蒸肉饼',null],['嫩豆腐块',/嫩豆腐/],
+    ['燕麦早餐杯',/燕麦片/],['软饭混合餐',/熟软米饭/],['山药蔬菜蒸糕',/低筋小麦面粉/]
+  ]);
+  const stage4=recipes.filter(recipe => recipe.stage==='stage4');
+  assert.deepEqual(new Set(stage4.map(recipe=>recipe.staple)),new Set(expectedStapleSources.keys()));
+  for (const recipe of stage4) {
+    const source=expectedStapleSources.get(recipe.staple);
+    if (source) assert.ok(recipe.ingredients.some(item=>source.test(item) && /\d+～\d+g/.test(item)),`${recipe.name}: missing measured ${recipe.staple} source`);
+  }
+});
+
+test('chewing ingredients contain only quantified base foods without duplicate cores', () => {
+  const normalizeCore=ingredient=>{
+    const food=ingredient.replace(/\s+\d+～\d+g$/,'');
+    if (/蛋/.test(food)) return '蛋';
+    if (/豆腐/.test(food)) return '豆腐';
+    return food;
+  };
+  for (const recipe of recipes.filter(recipe => recipe.stage==='stage4')) {
+    assert.doesNotMatch(recipe.ingredients.join('|'),/适量/,recipe.name);
+    assert.ok(recipe.ingredients.every(item=>/\d+～\d+g$/.test(item)),`${recipe.name}: ingredient amount is incomplete`);
+    const cores=recipe.ingredients.map(normalizeCore);
+    assert.equal(new Set(cores).size,cores.length,`${recipe.name}: duplicate core ingredient`);
   }
 });

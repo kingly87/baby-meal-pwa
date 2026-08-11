@@ -3,7 +3,7 @@ import { curatedStage4Rows } from './stage4-recipes-v2-rows.js';
 const ADDITIONAL_ROWS=curatedStage4Rows;
 
 const FISH=/鱼|鳕|鲈|三文鱼/;
-const MEAT=/肉|鸡|牛|猪/;
+const MEAT=/肉|牛|猪|鸡(?:肉|腿|胸)/;
 const METHODS={
   '方法01':'先蒸后压，保留细小柔软颗粒',
   '方法02':'先焯后剁，再与主食拌匀',
@@ -70,6 +70,7 @@ function allergensFromIngredients(ingredients){
 
 function safeProteinStep(protein){
   if(FISH.test(protein)) return `${protein}彻底蒸熟并逐片检查去刺，再压成细碎软末。`;
+  if(/蛋/.test(protein)) return `${protein}彻底加热至完全熟透，再处理成柔软小块。`;
   if(MEAT.test(protein)) return `${protein}选无骨部位，彻底煮熟后切碎或剁细。`;
   if(/虾/.test(protein)) return `${protein}去壳去虾线，彻底煮熟后切碎。`;
   return `${protein}彻底加热熟透，处理成柔软小块。`;
@@ -78,7 +79,7 @@ function safeProteinStep(protein){
 function enrichLegacy(recipe,index){
   const cookingMethod=METHOD_VALUES[Math.floor(index/12)%METHOD_VALUES.length];
   const fingerFood=/饭团|饺子|肉丸/.test(recipe.texture);
-  const ingredients=[...recipe.ingredients,...stapleIngredients(recipe.staple)];
+  const ingredients=mergeMeasuredIngredients([...recipe.ingredients.slice(0,2),...stapleIngredients(recipe.staple)]);
   return {
     ...recipe,
     ingredients,
@@ -102,7 +103,7 @@ function enrichLegacy(recipe,index){
 function additionalRecipe(row){
   const [id,name,category,group,protein,vegetable,staple,texture,chewingLevel,fingerFood,mealSlot,method,proteinAmount,vegetableAmount,shapeKey,storageKey,substitutionKey,stepKey]=row;
   const preparationSteps=STEP_PATTERNS[stepKey](vegetable,staple);
-  const ingredients=[`${protein} ${proteinAmount}`,`${vegetable} ${vegetableAmount}`,`${staple} 适量`,...stapleIngredients(staple)];
+  const ingredients=mergeMeasuredIngredients([`${protein} ${proteinAmount}`,`${vegetable} ${vegetableAmount}`,...stapleIngredients(staple)]);
   return {
     id,name,group,protein,vegetable,fruit:'',staple,stage:'stage4',stageName:'咀嚼练习期',age:'约9～12个月',
     texture,caroteneBand:/胡萝卜|南瓜|菠菜|红薯/.test(vegetable)?'high':'normal',
@@ -126,6 +127,11 @@ function additionalRecipe(row){
 }
 
 function stapleIngredients(staple){
+  if(/蒸蛋羹/.test(staple)) return ['鸡蛋液 10～15g'];
+  if(/软乌冬/.test(staple)) return ['小麦乌冬面 15～25g'];
+  if(/宝宝意面/.test(staple)) return ['小麦意面 15～25g'];
+  if(/迷你饺子/.test(staple)) return ['小麦饺子皮 10～15g'];
+  if(/软烂焖饭|软饭团|杂蔬烩饭/.test(staple)) return ['熟软米饭 20～30g'];
   if(/豆腐/.test(staple)) return ['嫩豆腐 20～30g'];
   if(/蒸蛋/.test(staple)) return ['鸡蛋液 10～15g'];
   if(/蒸糕/.test(staple)) return ['低筋小麦面粉 10～15g','鸡蛋液 5～10g'];
@@ -137,6 +143,23 @@ function stapleIngredients(staple){
   if(/馄饨/.test(staple)) return ['小麦馄饨皮 10～15g'];
   if(/饭团|混合餐/.test(staple)) return ['熟软米饭 20～30g'];
   return [];
+}
+
+function mergeMeasuredIngredients(ingredients){
+  const merged=new Map();
+  for (const ingredient of ingredients) {
+    const match=ingredient.match(/^(.+?)\s+(\d+)～(\d+)g$/);
+    if (!match) throw new Error(`未量化的基础食材：${ingredient}`);
+    const [,food,min,max]=match;
+    const core=/蛋/.test(food)?'蛋':/豆腐/.test(food)?'豆腐':food;
+    const current=merged.get(core);
+    if (current) {
+      current.min+=Number(min);
+      current.max+=Number(max);
+      if (food==='嫩豆腐' || food==='鸡蛋液') current.food=food;
+    } else merged.set(core,{food,min:Number(min),max:Number(max)});
+  }
+  return [...merged.values()].map(({food,min,max})=>`${food} ${min}～${max}g`);
 }
 
 export function buildStage4RecipesV2(legacyStage4){
