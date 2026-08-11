@@ -1,4 +1,4 @@
-const CACHE_NAME='baby-growth-v1-20260720-r15';
+const CACHE_NAME='baby-growth-v1-20260720-r16';
 const APP_SHELL=[
   "./","./index.html","./manifest.webmanifest","./assets/styles/app.css","./assets/icons/icon.svg","./assets/icons/icon-192.svg","./assets/icons/icon-512.svg","./data/recipes.js","./data/recipes-base.js","./data/stage4-recipes-v2.js","./data/stage4-recipes-v2-rows.js",
   "./src/app.js","./src/db.js","./src/store.js","./src/router.js","./src/core/id.js","./src/core/dates.js","./src/core/schema.js",
@@ -6,7 +6,7 @@ const APP_SHELL=[
   "./src/features/meals/planner.js","./src/features/meals/preferences.js","./src/features/meals/presentation.js","./src/features/meals/recipe-details.js","./src/features/meals/shopping.js",
   "./src/features/records/records.js","./src/features/records/sleep.js","./src/features/records/new-food.js",
   "./src/features/growth/timeline.js","./src/features/growth/chart.js","./src/features/growth/daily-trends.js","./src/features/backup/backup.js","./src/features/backup/validate.js","./src/features/migration/v2.js","./src/features/notifications/notifications.js",
-  "./src/ui/render.js","./src/ui/today.js","./src/ui/meals.js","./src/ui/records.js","./src/ui/growth.js","./src/ui/settings.js","./src/ui/onboarding.js","./src/ui/feedback.js","./src/ui/dialogs.js"
+  "./src/ui/render.js","./src/ui/today.js","./src/ui/meals.js","./src/ui/records.js","./src/ui/growth.js","./src/ui/daily-trends.js","./src/ui/settings.js","./src/ui/onboarding.js","./src/ui/feedback.js","./src/ui/dialogs.js"
 ];
 
 self.addEventListener('install',event=>event.waitUntil(caches.open(CACHE_NAME).then(cache=>cache.addAll(APP_SHELL))));

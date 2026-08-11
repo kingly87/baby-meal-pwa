@@ -374,3 +374,10 @@ test('growth timeline exposes filterable event types', () => {
   const html=growthView({timeline:[{type:'sleep',date:'2026-07-20',title:'睡眠'}]});
   assert.match(html,/data-type="sleep"/); assert.match(html,/value="sleep"/); assert.match(html,/value="task"/);
 });
+
+test('growth screen renders a supplied daily lifestyle trend model',()=>{
+  const html=growthView({timeline:[],trend:{metric:'sleep',days:7,unit:'小时',average:0,delta:null,points:[]}});
+  assert.match(html,/id="daily-trends"/);
+  assert.match(html,/data-trend-metric="sleep"/);
+  assert.match(html,/data-trend-days="7"/);
+});
