@@ -151,6 +151,7 @@ function mergeMeasuredIngredients(ingredients){
     const match=ingredient.match(/^(.+?)\s+(\d+)～(\d+)g$/);
     if (!match) throw new Error(`未量化的基础食材：${ingredient}`);
     const [,food,min,max]=match;
+    if (Number(min)<=0 || Number(max)<=0 || Number(min)>Number(max)) throw new Error(`克数范围必须为正数且由小到大：${ingredient}`);
     const core=/蛋/.test(food)?'蛋':/豆腐/.test(food)?'豆腐':food;
     const current=merged.get(core);
     if (current) {

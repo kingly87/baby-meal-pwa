@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { recipes } from '../data/recipes.js';
 import { curatedStage4Rows } from '../data/stage4-recipes-v2-rows.js';
+import { buildStage4RecipesV2 } from '../data/stage4-recipes-v2.js';
 import { validateChewingRecipe } from '../src/features/meals/recipe-details.js';
 
 test('recipe catalog contains 780 unique complete recipes', () => {
@@ -182,5 +183,14 @@ test('chewing ingredients contain only quantified base foods without duplicate c
     assert.ok(recipe.ingredients.every(item=>/\d+～\d+g$/.test(item)),`${recipe.name}: ingredient amount is incomplete`);
     const cores=recipe.ingredients.map(normalizeCore);
     assert.equal(new Set(cores).size,cores.length,`${recipe.name}: duplicate core ingredient`);
+  }
+});
+
+test('chewing ingredient generation rejects non-positive or reversed gram ranges', () => {
+  for (const ingredients of [['鸡肉 0～10g','菠菜 10～20g'],['鸡肉 20～10g','菠菜 10～20g']]) {
+    const legacyRecipe={
+      id:'invalid-range',name:'非法克数',group:'鸡肉',protein:'鸡肉',vegetable:'菠菜',staple:'软嫩肉丸',texture:'肉丸',ingredients
+    };
+    assert.throws(()=>buildStage4RecipesV2([legacyRecipe]),/克数范围必须为正数且由小到大/);
   }
 });
