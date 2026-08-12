@@ -1,7 +1,17 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { MemoryRepository } from '../src/db.js';
-import { createBackup, previewBackup, importBackup, resetApplication } from '../src/features/backup/backup.js';
+import { createBackup, previewBackup, importBackup, restoreBackupIntoEmpty, resetApplication } from '../src/features/backup/backup.js';
+
+const restorePayload = {
+  app:'baby-growth-assistant',
+  schemaVersion:1,
+  exportedAt:'2026-07-20T12:00:00.000Z',
+  data:{
+    babies:[{id:'b1',name:'柚柚'}],
+    dailyRecords:[{id:'r1',babyId:'b1',occurredAt:'2026-07-20T08:00:00.000Z',value:180,type:'feeding'}]
+  }
+};
 
 test('backup exports version, timestamp, all stores and counts', async () => {
   const repo=new MemoryRepository(); await repo.put('babies',{id:'b1',name:'柚柚'});
@@ -47,4 +57,58 @@ test('backup validates templates preferences reminders and application settings'
     {appSettings:[{id:'global',activeBabyId:'b1',notifiedTaskIds:'bad'}]}
   ];
   for(const data of invalid) assert.throws(()=>previewBackup(JSON.stringify({...base,data:{...base.data,...data}})),/无效字段/);
+});
+
+test('restores a valid V1 backup into an empty repository and returns its preview', async () => {
+  const repo=new MemoryRepository();
+  const result=await restoreBackupIntoEmpty(repo,JSON.stringify(restorePayload));
+  assert.equal(result.babyCount,1);
+  assert.equal(result.recordCount,2);
+  assert.deepEqual(await repo.list('babies'),restorePayload.data.babies);
+  assert.deepEqual(await repo.list('dailyRecords'),restorePayload.data.dailyRecords);
+});
+
+test('rejects restore when any repository store already contains data without modifying it', async () => {
+  for(const seed of [
+    {appSettings:[{id:'global',notificationsEnabled:true}]},
+    {dailyRecords:[{id:'existing',babyId:'missing'}]}
+  ]) {
+    const repo=new MemoryRepository(seed);
+    const before=await repo.exportAll();
+    await assert.rejects(restoreBackupIntoEmpty(repo,JSON.stringify(restorePayload)),/当前已有数据，不能直接覆盖/);
+    assert.deepEqual(await repo.exportAll(),before);
+  }
+});
+
+test('checks emptiness inside the restore transaction before replacing data', async () => {
+  class ConcurrentRepository extends MemoryRepository {
+    async transaction(stores,callback) {
+      await this.put('appSettings',{id:'concurrent',notificationsEnabled:true});
+      return super.transaction(stores,callback);
+    }
+  }
+  const repo=new ConcurrentRepository();
+  await assert.rejects(restoreBackupIntoEmpty(repo,JSON.stringify(restorePayload)),/当前已有数据，不能直接覆盖/);
+  assert.deepEqual(await repo.list('appSettings'),[{id:'concurrent',notificationsEnabled:true}]);
+  assert.equal((await repo.list('babies')).length,0);
+});
+
+test('invalid backup leaves an empty repository empty', async () => {
+  const repo=new MemoryRepository();
+  await assert.rejects(restoreBackupIntoEmpty(repo,'{bad'),/无法解析/);
+  const invalid={...restorePayload,data:{babies:[{id:'b1',name:''}]}};
+  await assert.rejects(restoreBackupIntoEmpty(repo,JSON.stringify(invalid)),/缺少姓名/);
+  assert.ok(Object.values(await repo.exportAll()).every(records=>records.length===0));
+});
+
+test('failed replacement rolls back all restored records', async () => {
+  class FailingRepository extends MemoryRepository {
+    async put(store,value) {
+      if(store==='dailyRecords') throw new Error('simulated replacement failure');
+      return super.put(store,value);
+    }
+  }
+  const repo=new FailingRepository();
+  await assert.rejects(restoreBackupIntoEmpty(repo,JSON.stringify(restorePayload)),/simulated replacement failure/);
+  assert.ok(Object.values(await repo.exportAll()).every(records=>records.length===0));
 });

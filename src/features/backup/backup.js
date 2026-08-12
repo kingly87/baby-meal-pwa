@@ -13,4 +13,16 @@ export function previewBackup(text) {
 }
 
 export async function importBackup(repository, text) { const backup = parseAndValidateBackup(text); await repository.replaceAll(backup.data); return previewBackup(backup); }
+export async function restoreBackupIntoEmpty(repository, text) {
+  const backup=parseAndValidateBackup(text);
+  return repository.transaction(STORE_NAMES,async tx=>{
+    const recordsByStore=await Promise.all(STORE_NAMES.map(store=>tx.list(store)));
+    if(recordsByStore.some(records=>records.length)) throw new Error('当前已有数据，不能直接覆盖');
+    for(const store of STORE_NAMES) {
+      await tx.clear(store);
+      for(const item of backup.data[store]) await tx.put(store,item);
+    }
+    return {schemaVersion:backup.schemaVersion,exportedAt:backup.exportedAt,babyCount:backup.data.babies.length,recordCount:STORE_NAMES.reduce((sum,store)=>sum+backup.data[store].length,0)};
+  });
+}
 export async function resetApplication(repository, storage = globalThis.localStorage) { await repository.clearAll(); storage?.removeItem?.('babyGrowthAssistantV1Ui'); storage?.removeItem?.('babyGrowthAssistantV1LastExport'); }

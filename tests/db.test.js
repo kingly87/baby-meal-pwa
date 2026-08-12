@@ -30,3 +30,50 @@ test('repository transaction rolls back on failure and clear removes all data', 
 test('indexed repository exposes the same transaction workflow API', () => {
   assert.equal(typeof IndexedDbRepository.prototype.transaction,'function');
 });
+
+test('indexed repository aborts and does not commit staged writes after a request error', async () => {
+  const committed=new Map(STORE_NAMES.map(name=>[name,new Map()]));
+  let aborted=false;
+  const request=operation=>{
+    const result={};
+    queueMicrotask(()=>{
+      try { result.result=operation(); result.onsuccess?.(); }
+      catch(error) { result.error=error; result.onerror?.(); }
+    });
+    return result;
+  };
+  const db={
+    transaction(stores,mode) {
+      const names=Array.isArray(stores)?stores:[stores];
+      const staged=new Map(names.map(name=>[name,new Map(committed.get(name))]));
+      const tx={
+        error:null,
+        objectStore(name) {
+          const records=mode==='readwrite'?staged.get(name):committed.get(name);
+          return {
+            put(value) {
+              return request(()=>{
+                if(value.id==='fail') throw new Error('fake request failure');
+                records.set(value.id,structuredClone(value));
+                return value.id;
+              });
+            },
+            getAll() { return request(()=>[...records.values()].map(structuredClone)); }
+          };
+        },
+        abort() { aborted=true; queueMicrotask(()=>tx.onabort?.()); }
+      };
+      return tx;
+    }
+  };
+  const indexedDB={open(){return request(()=>db)}};
+  const repo=new IndexedDbRepository({indexedDB});
+
+  await assert.rejects(repo.transaction(['babies'],async tx=>{
+    await tx.put('babies',{id:'staged',name:'未提交'});
+    await tx.put('babies',{id:'fail',name:'失败'});
+  }),/fake request failure/);
+
+  assert.equal(aborted,true);
+  assert.deepEqual(await repo.list('babies'),[]);
+});

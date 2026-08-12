@@ -4,11 +4,11 @@ import { readFile } from 'node:fs/promises';
 import { todayView } from '../src/ui/today.js';
 import { formatTimelineDate } from '../src/ui/render.js';
 import { onboardingView } from '../src/ui/onboarding.js';
-import { mealsView } from '../src/ui/meals.js';
+import { mealsView, recipeMatchesFilters } from '../src/ui/meals.js';
 import { growthView, chartSvg } from '../src/ui/growth.js';
 import { recordsView } from '../src/ui/records.js';
 import { formatDateTimeLocal } from '../src/app.js';
-import { openActionDialog } from '../src/ui/dialogs.js';
+import { openActionDialog, guardedDialogClose, runDialogSubmit } from '../src/ui/dialogs.js';
 
 function fakeDialogDocument(){
   class Node extends EventTarget{
@@ -40,6 +40,96 @@ function fakeDialogDocument(){
 test('today view exposes current, next, sleep, quick actions and timeline regions', () => {
   const html=todayView({baby:{name:'柚柚'},primary:null,next:null,sleepMinutes:0,timeline:[]});
   for(const id of ['current-task-card','next-task-card','sleep-summary','quick-actions','today-timeline']) assert.match(html,new RegExp(`id="${id}"`));
+  assert.match(html,/data-quick="stool"[^>]*>[\s\S]*?记录便便/);
+  assert.match(html,/data-quick="urine"[^>]*>[\s\S]*?记录尿尿/);
+  assert.match(html,/data-quick="water"/);
+  assert.equal((html.match(/data-quick="stool"/g)||[]).length,1);
+  assert.equal((html.match(/data-quick="urine"/g)||[]).length,1);
+});
+
+test('records view offers independent accessible one-tap stool and urine actions', () => {
+  const html=recordsView({records:[
+    {id:'s1',type:'stool',value:1,occurredAt:'2026-08-11T08:00:00.000Z'},
+    {id:'u1',type:'urine',value:1,occurredAt:'2026-08-11T09:00:00.000Z'}
+  ]});
+  assert.match(html,/data-record="stool"[^>]*aria-label="记录便便"/);
+  assert.match(html,/data-record="urine"[^>]*aria-label="记录尿尿"/);
+  assert.match(html,/便便 · 1 次/);
+  assert.match(html,/尿尿 · 1 次/);
+});
+
+test('records view clearly reports unavailable local record history',()=>{
+  const html=recordsView({records:[],sleeps:[],dataError:'记录数据暂时无法读取'});
+  assert.match(html,/role="status"/);
+  assert.match(html,/记录数据暂时无法读取/);
+  assert.doesNotMatch(html,/还没有记录/);
+});
+
+test('today sleep summary distinguishes unavailable storage from a real zero',()=>{
+  const unavailable=todayView({sleepMinutes:0,sleepUnavailable:true});
+  assert.match(unavailable,/今日睡眠[\s\S]*暂不可用/);
+  assert.doesNotMatch(unavailable,/今日睡眠[\s\S]*0\.0 小时/);
+  assert.match(todayView({sleepMinutes:0,sleepUnavailable:false}),/今日睡眠[\s\S]*0\.0 小时/);
+});
+
+test('quick count actions disable during writes and surface errors', async () => {
+  const source=await readFile('src/app.js','utf8');
+  assert.match(source,/button\.disabled=true/);
+  assert.match(source,/finally\{button\.disabled=false\}/);
+  assert.match(source,/记录失败/);
+  assert.match(source,/persistCountRecord/);
+});
+
+test('count edit dialog exposes integer count, time, note and async error handling', async () => {
+  const source=await readFile('src/app.js','utf8');
+  assert.match(source,/item\.type==='stool'\?'便便':item\.type==='urine'\?'尿尿'/);
+  assert.match(source,/name="value" type="number" min="1" step="1"/);
+  assert.match(source,/name="occurredAt" type="datetime-local"/);
+  assert.match(source,/updateDailyRecord/);
+  const dialogs=await readFile('src/ui/dialogs.js','utf8');
+  assert.match(dialogs,/role="status"/);
+  assert.match(dialogs,/runDialogSubmit/);
+});
+
+test('async dialog submit locks during storage and keeps the dialog open on failure', async () => {
+  const submit={disabled:false},cancel={disabled:false},error={hidden:true,textContent:''},closed=[];
+  const wrap={dataset:{},attributes:{},setAttribute(name,value){this.attributes[name]=value},removeAttribute(name){delete this.attributes[name]}};
+  const close=guardedDialogClose(wrap,value=>closed.push(value));
+  let rejectWrite;
+  const pending=runDialogSubmit({wrap,submit,cancel,error,values:{value:'1'},close,onSubmit:()=>new Promise((resolve,reject)=>{rejectWrite=reject})});
+  assert.equal(submit.disabled,true);
+  assert.equal(cancel.disabled,true);
+  assert.equal(wrap.dataset.pending,'true');
+  assert.equal(wrap.attributes['aria-busy'],'true');
+  assert.equal(close(null),false);
+  assert.deepEqual(closed,[]);
+  const duplicate=await runDialogSubmit({wrap,submit,cancel,error,values:{value:'1'},close,onSubmit:async()=>{throw new Error('不应执行')}});
+  assert.equal(duplicate,false);
+  rejectWrite(new Error('保存失败'));
+  assert.equal(await pending,false);
+  assert.equal(submit.disabled,false);
+  assert.equal(cancel.disabled,false);
+  assert.equal(wrap.dataset.pending,undefined);
+  assert.equal(wrap.attributes['aria-busy'],undefined);
+  assert.equal(error.hidden,false);
+  assert.equal(error.textContent,'保存失败');
+  assert.deepEqual(closed,[]);
+  assert.equal(close(null),true);
+  assert.deepEqual(closed,[null]);
+});
+
+test('successful async dialog submission closes once after the pending lock', async () => {
+  const submit={disabled:false},cancel={disabled:false},error={hidden:true,textContent:''},closed=[];
+  const wrap={dataset:{},setAttribute(){},removeAttribute(){}};
+  const close=guardedDialogClose(wrap,value=>closed.push(value));
+  assert.equal(await runDialogSubmit({wrap,submit,cancel,error,values:{value:'2'},close,onSubmit:async values=>({...values,saved:true})}),true);
+  assert.deepEqual(closed,[{value:'2',saved:true}]);
+});
+
+test('five today quick actions stay uniform at phone widths', async () => {
+  const css=await readFile('assets/styles/app.css','utf8');
+  assert.match(css,/\.quick-grid\{grid-template-columns:repeat\(5,minmax\(0,1fr\)\)\}/);
+  assert.match(css,/@media\(max-width:480px\)\{\.quick-grid\{grid-template-columns:repeat\(3,minmax\(0,1fr\)\)\}\}/);
 });
 
 test('today task exposes only complete and more as top-level actions', () => {
@@ -55,6 +145,18 @@ test('onboarding contains labeled baby, birthday, stage and privacy fields', () 
   assert.match(html,/role="dialog"/); assert.match(html,/aria-modal="true"/);
 });
 
+test('onboarding offers V1 backup restore before creating a new baby', () => {
+  const html=onboardingView();
+  const backupIndex=html.indexOf('id="onboarding-backup"');
+  const formIndex=html.indexOf('id="onboarding-form"');
+  assert.ok(backupIndex>=0);
+  assert.ok(backupIndex<formIndex);
+  assert.match(html,/id="onboarding-backup"[^>]*accept="application\/json"/);
+  assert.match(html,/恢复 V1 备份/);
+  assert.match(html,/欢迎使用 V2/);
+  assert.match(html,/id="onboarding-recovery-status"[^>]*role="status"[^>]*hidden/);
+});
+
 test('timeline timestamps are formatted in the selected local timezone', () => {
   assert.match(formatTimelineDate('2026-07-20T08:15:00.000Z','Asia/Shanghai'),/16:15/);
 });
@@ -65,12 +167,102 @@ test('visual system includes minimum targets, focus, safe areas and dark mode', 
 });
 
 test('meal and growth screens expose shopping, preferences and tooth actions', () => {
-  const recipe={id:1,name:'南瓜饭',stage:'stage4',stageName:'咀嚼练习期',ingredients:['南瓜']};
+  const recipe={id:1,name:'南瓜饭',stage:'stage4',stageName:'咀嚼练习期',ingredients:['南瓜'],vegetable:'南瓜'};
   const meals=mealsView({week:null,recipes:[recipe],stage:'stage4',shopping:[{id:'s1',name:'南瓜',done:false,inStock:false}]});
   for(const action of ['toggle-shopping','add-shopping','favorite-recipe','dislike-food']) assert.match(meals,new RegExp(`data-action="${action}"`));
   assert.match(meals,/data-stage="stage4"/);
   assert.match(growthView({timeline:[]}),/data-growth="tooth"/);
   assert.match(chartSvg({ready:true,min:8,max:9,points:[{x:0,y:1,value:8,date:'2026-07-20'},{x:1,y:0,value:9,date:'2026-07-21'}]}),/<polyline/);
+});
+
+const detailedRecipe={
+  id:7001,name:'<南瓜&牛肉软饭>',stage:'stage4',stageName:'咀嚼练习期',group:'软饭',staple:'米饭',texture:'软饭',
+  ingredients:['熟米饭 45g','南瓜 20g','牛肉 15g'],steps:['食材蒸熟','压拌成团'],chewingLevel:'beginner-chewing',
+  sizeGuide:'成人拇指第一节大小',softnessTest:'拇指和食指可轻松压碎',fingerFood:true,allergens:[],
+  substitutions:['牛肉可换鸡肉'],mealSlots:['午餐'],freezable:true,storage:'冷藏不超过 24 小时 <勿复热>',vegetable:'南瓜'
+};
+
+test('stage4 recipe browser exposes combined chewing filters and accessible details', () => {
+  const html=mealsView({recipes:[detailedRecipe],stage:'stage4'});
+  for(const id of ['recipe-search','recipe-stage','recipe-chewing-level','recipe-finger-food']) assert.match(html,new RegExp(`id="${id}"`));
+  assert.match(html,/<details[^>]*class="recipe-details"/);
+  assert.match(html,/<summary>查看完整做法与安全提示<\/summary>/);
+  for(const text of ['熟米饭 45g','食材蒸熟','成人拇指第一节大小','拇指和食指可轻松压碎','未标注常见过敏原','牛肉可换鸡肉','适合手抓','午餐','可冷冻']) assert.match(html,new RegExp(text));
+  assert.match(html,/冷藏不超过 24 小时 &lt;勿复热&gt;/);
+  assert.doesNotMatch(html,/<勿复热>/);
+  assert.doesNotMatch(html,/<南瓜&牛肉软饭>/);
+  assert.match(html,/&lt;南瓜&amp;牛肉软饭&gt;/);
+});
+
+test('legacy recipes render a useful fallback without fabricated safety claims', () => {
+  const html=mealsView({recipes:[{id:2,name:'旧食谱',stage:'stage4',stageName:'咀嚼练习期',ingredients:['米饭']}],stage:'stage4'});
+  assert.match(html,/旧食谱/);
+  assert.match(html,/详细做法待补充/);
+  assert.match(html,/尺寸指导待补充/);
+  assert.match(html,/软硬度测试待补充/);
+  assert.match(html,/过敏原信息待补充/);
+  assert.match(html,/进食方式待补充/);
+  assert.match(html,/保存方式待补充/);
+});
+
+test('legacy recipe storage is preserved while missing freezing metadata stays unknown', () => {
+  const html=mealsView({recipes:[{id:3,name:'旧粥',stage:'stage4',stageName:'咀嚼练习期',ingredients:['米粥'],storage:'当天吃完 & 不隔夜'}],stage:'stage4'});
+  assert.match(html,/当天吃完 &amp; 不隔夜/);
+  assert.match(html,/冷冻信息待补充/);
+  assert.doesNotMatch(html,/建议现做现吃/);
+});
+
+test('recipe filter combines stage, search, chewing level and finger food', () => {
+  assert.equal(recipeMatchesFilters(detailedRecipe,{stage:'stage4',query:'牛肉',chewingLevel:'beginner-chewing',fingerFood:'yes'}),true);
+  assert.equal(recipeMatchesFilters(detailedRecipe,{stage:'stage4',query:'牛肉',chewingLevel:'advanced-chewing',fingerFood:'yes'}),false);
+  assert.equal(recipeMatchesFilters(detailedRecipe,{stage:'stage3',query:'',chewingLevel:'all',fingerFood:'all'}),false);
+  assert.equal(recipeMatchesFilters(detailedRecipe,{stage:'all',query:'',chewingLevel:'all',fingerFood:'no'}),false);
+  assert.equal(recipeMatchesFilters({name:'旧食谱',stage:'stage4',ingredients:[]},{stage:'stage4',query:'旧',chewingLevel:'all',fingerFood:'all'}),true);
+  assert.equal(recipeMatchesFilters({name:'旧食谱',stage:'stage4',ingredients:[]},{stage:'stage4',query:'',chewingLevel:'all',fingerFood:'no'}),false);
+});
+
+test('recipe browser uses 320px-safe wrapping and overflow rules', async () => {
+  const css=await readFile('assets/styles/app.css','utf8');
+  assert.match(css,/\.recipe-filter-row\s*\{[^}]*grid-template-columns\s*:\s*repeat\(2,minmax\(0,1fr\)\)[^}]*\}/s);
+  assert.match(css,/\.recipe-card\s*\{[^}]*min-width\s*:\s*0[^}]*overflow-wrap\s*:\s*anywhere[^}]*\}/s);
+  assert.match(css,/@media\s*\(max-width\s*:\s*380px\)\s*\{[^}]*\.recipe-filter-row\s*\{[^}]*grid-template-columns\s*:\s*1fr/s);
+});
+
+test('recipe browser limits initial detailed DOM and can request every matching recipe', () => {
+  const catalog=Array.from({length:80},(_,index)=>({...detailedRecipe,id:`v2-${index}`,name:`食谱${index}`}));
+  const initial=mealsView({recipes:catalog,stage:'stage4',recipeBrowser:{stage:'stage4',query:'',chewingLevel:'all',fingerFood:'all',limit:24}});
+  assert.equal((initial.match(/class="recipe-card/g)||[]).length,24);
+  assert.ok((initial.match(/<section>/g)||[]).length<250);
+  assert.match(initial,/data-action="load-more-recipes"/);
+  assert.match(initial,/显示 24 \/ 80/);
+  const all=mealsView({recipes:catalog,stage:'stage4',recipeBrowser:{stage:'stage4',query:'',chewingLevel:'all',fingerFood:'all',limit:80}});
+  assert.equal((all.match(/class="recipe-card/g)||[]).length,80);
+  assert.doesNotMatch(all,/data-action="load-more-recipes"/);
+});
+
+test('recipe browser restores controlled filter values after a refresh render', () => {
+  const html=mealsView({recipes:[detailedRecipe],stage:'stage4',recipeBrowser:{stage:'all',query:'南瓜',chewingLevel:'beginner-chewing',fingerFood:'yes',limit:24}});
+  assert.match(html,/id="recipe-search"[^>]*value="南瓜"/);
+  assert.match(html,/option value="all" selected>全部阶段/);
+  assert.match(html,/option value="beginner-chewing" selected>咀嚼入门/);
+  assert.match(html,/option value="yes" selected>手指食物/);
+});
+
+test('application owns recipe filter and paging state across refresh renders', async () => {
+  const app=await readFile('src/app.js','utf8');
+  assert.match(app,/let recipeBrowser=\{stage:null,query:'',chewingLevel:'all',fingerFood:'all',limit:24\}/);
+  assert.match(app,/mealsView\(\{[^}]*recipeBrowser\}\)/);
+  assert.match(app,/recipeBrowser=readRecipeFilters\(\)/);
+  assert.match(app,/recipeBrowser=\{\.\.\.recipeBrowser,limit:recipeBrowser\.limit\+24\}/);
+  assert.doesNotMatch(app,/Number\(button\.dataset\.id\)/);
+});
+
+test('malformed legacy recipe arrays never throw or inject markup', () => {
+  const malformed={id:'legacy-x',name:'旧食谱',stage:'stage4',ingredients:[null,{bad:'<img src=x>'},'<script>alert(1)</script>'],steps:[null,{bad:'<b>'}],substitutions:[{}],mealSlots:[null]};
+  assert.doesNotThrow(()=>mealsView({recipes:[malformed],stage:'stage4'}));
+  const html=mealsView({recipes:[malformed],stage:'stage4'});
+  assert.doesNotMatch(html,/<script>|<img|<b>/);
+  assert.match(html,/&lt;script&gt;alert\(1\)&lt;\/script&gt;/);
 });
 
 test('records screen preserves stable record management controls', () => {
@@ -195,4 +387,31 @@ test('sleep dialogs choose a type and completed flows share schedule recalculati
 test('growth timeline exposes filterable event types', () => {
   const html=growthView({timeline:[{type:'sleep',date:'2026-07-20',title:'睡眠'}]});
   assert.match(html,/data-type="sleep"/); assert.match(html,/value="sleep"/); assert.match(html,/value="task"/);
+});
+
+test('growth screen renders a supplied daily lifestyle trend model',()=>{
+  const html=growthView({timeline:[],trend:{metric:'sleep',days:7,unit:'小时',average:0,delta:null,points:[]}});
+  assert.match(html,/id="daily-trends"/);
+  assert.match(html,/data-trend-metric="sleep"/);
+  assert.match(html,/data-trend-days="7"/);
+});
+
+test('growth screen keeps the rest of the page usable when trend loading fails',()=>{
+  const html=growthView({timeline:[],trendError:'趋势数据读取失败'});
+  assert.match(html,/role="status"/);
+  assert.match(html,/趋势数据读取失败/);
+  assert.match(html,/id="growth-chart"/);
+});
+
+test('app binds trend metric and range controls without changing route',async()=>{
+  const app=await readFile('src/app.js','utf8');
+  assert.match(app,/data-trend-metric/);
+  assert.match(app,/data-trend-days/);
+  assert.match(app,/trendState\.setMetric/);
+  assert.match(app,/trendState\.setDays/);
+  const importHandler=app.match(/async function importData\(event\)\{[^\n]+/)?.[0]||'';
+  assert.match(importHandler,/importBackup[\s\S]*trendState\.reset\(\)[\s\S]*refresh/);
+  const deleteHandler=app.match(/async function deleteBaby\(\)\{[^\n]+/)?.[0]||'';
+  assert.match(deleteHandler,/setActiveBaby|activeBabyId|appSettings/);
+  assert.match(deleteHandler,/trendState\.reset\(\)[\s\S]*refresh/);
 });
