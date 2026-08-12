@@ -1,5 +1,11 @@
 # PROJECT_STATE
 
+## 2026-08-12 Weight decimal input fix
+
+- Weight entry now uses a 0.01 kg step, so values such as 12.55 are accepted; height remains at 0.1 cm precision.
+- Service Worker cache revision is `baby-growth-v1-20260720-r25`.
+- Verification: 218 automated tests passed; syntax check and `git diff --check` passed.
+
 ## 2026-08-12 通知调度与备份恢复并发保护
 
 - 通知发送在每次发送前和异步发送后验证当前刷新及调度代次；过期任务不会继续发送后续通知，也不会写回提醒 ID。

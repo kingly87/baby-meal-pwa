@@ -389,6 +389,11 @@ test('growth timeline exposes filterable event types', () => {
   assert.match(html,/data-type="sleep"/); assert.match(html,/value="sleep"/); assert.match(html,/value="task"/);
 });
 
+test('weight entry accepts two decimal kilograms while height keeps decimal precision', async () => {
+  const app=await readFile('src/app.js','utf8');
+  assert.match(app,/field==='weight'\?'0\.01':'0\.1'/);
+});
+
 test('growth screen renders a supplied daily lifestyle trend model',()=>{
   const html=growthView({timeline:[],trend:{metric:'sleep',days:7,unit:'小时',average:0,delta:null,points:[]}});
   assert.match(html,/id="daily-trends"/);
