@@ -1,7 +1,30 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { MemoryRepository } from '../src/db.js';
-import { loadApplicationModel, bindOnboardingActions, ensureDailySchedule, recalculateScheduleForSleep, loadDailyTrend, createTrendState, loadRenderData, runRefreshCycle, createRefreshCoordinator, createAsyncEpoch, runNotificationSchedule, runDataReplacement, changeNotificationScheduling, lockApplicationAfterCommittedReplacement, syncNotifiedTasks } from '../src/app.js';
+import { loadApplicationModel, bindOnboardingActions, bindRecipeSearchInput, ensureDailySchedule, recalculateScheduleForSleep, loadDailyTrend, createTrendState, loadRenderData, runRefreshCycle, createRefreshCoordinator, createAsyncEpoch, runNotificationSchedule, runDataReplacement, changeNotificationScheduling, lockApplicationAfterCommittedReplacement, syncNotifiedTasks } from '../src/app.js';
+
+test('recipe search waits for Chinese IME composition to finish', () => {
+  const listeners={},timers=[],input={isConnected:true,addEventListener(type,handler){listeners[type]=handler}};
+  let applied=0;
+  bindRecipeSearchInput(input,{apply:()=>{applied++},setTimer:callback=>{timers.push(callback);return timers.length},clearTimer:()=>{}});
+  listeners.compositionstart();
+  listeners.input({isComposing:true});
+  assert.equal(timers.length,0);
+  listeners.compositionend();
+  assert.equal(timers.length,1);
+  timers[0]();
+  assert.equal(applied,1);
+});
+
+test('recipe search ignores a delayed refresh after leaving the recipe page', () => {
+  const listeners={},timers=[],input={isConnected:true,addEventListener(type,handler){listeners[type]=handler}};
+  let applied=0;
+  bindRecipeSearchInput(input,{apply:()=>{applied++},setTimer:callback=>{timers.push(callback);return timers.length},clearTimer:()=>{}});
+  listeners.input({isComposing:false});
+  input.isConnected=false;
+  timers[0]();
+  assert.equal(applied,0);
+});
 import { createDefaultTemplate } from '../src/features/schedule/template.js';
 import { createBackup } from '../src/features/backup/backup.js';
 import { AppStore } from '../src/store.js';

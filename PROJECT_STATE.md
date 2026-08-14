@@ -1,5 +1,12 @@
 # PROJECT_STATE
 
+## 2026-08-14 中文菜谱搜索与睡眠选项修复
+
+- 菜谱搜索会等待中文输入法完成组词后再筛选，避免输入框在拼音组合期间被重新渲染。
+- 离开菜谱页后会丢弃尚未执行的搜索刷新，避免干扰记录页的睡眠类型选择。
+- Service Worker 缓存版本升级为 `baby-growth-v1-20260720-r26`。
+- 验证：220 项自动化测试通过；浏览器实测“南瓜”中文搜索和夜间睡眠选择通过。
+
 ## 2026-08-12 Weight decimal input fix
 
 - Weight entry now uses a 0.01 kg step, so values such as 12.55 are accepted; height remains at 0.1 cm precision.
