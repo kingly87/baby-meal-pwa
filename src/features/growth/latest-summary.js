@@ -5,14 +5,22 @@ function validLocalDate(value){
 }
 
 function timestamp(value){
-  if(typeof value!=='string')return'';
+  if(typeof value!=='string')return null;
   const time=Date.parse(value);
-  return Number.isFinite(time)?String(time).padStart(16,'0'):'';
+  if(!Number.isFinite(time))return null;
+  const fraction=value.match(/\.(\d+)(?:Z|[+-]\d{2}:?\d{2})$/)?.[1]||'';
+  return{time,fraction:fraction.padEnd(9,'0').slice(0,9)};
+}
+
+function compareTimestamps(a,b){
+  const left=timestamp(a),right=timestamp(b);
+  if(!left||!right)return Number(Boolean(left))-Number(Boolean(right));
+  return left.time-right.time||left.fraction.localeCompare(right.fraction);
 }
 
 function compareRecords(a,b){
   for(const field of ['date']){const result=String(a[field]??'').localeCompare(String(b[field]??''));if(result)return result}
-  for(const field of ['updatedAt','createdAt']){const result=timestamp(a[field]).localeCompare(timestamp(b[field]));if(result)return result}
+  for(const field of ['updatedAt','createdAt']){const result=compareTimestamps(a[field],b[field]);if(result)return result}
   return String(a.id??'').localeCompare(String(b.id??''));
 }
 

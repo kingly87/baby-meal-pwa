@@ -175,19 +175,21 @@ test('meal and growth screens expose shopping, preferences and tooth actions', (
   assert.match(chartSvg({ready:true,min:8,max:9,points:[{x:0,y:1,value:8,date:'2026-07-20'},{x:1,y:0,value:9,date:'2026-07-21'}]}),/<polyline/);
 });
 
-test('growth summary cards render latest values, dates, fallbacks and escaped dynamic text',()=>{
+test('growth summary cards render accessible dates, fallbacks and strictly filtered values',()=>{
   const html=growthView({timeline:[],measurements:[
     {id:'w',date:'2026-08-14',weight:12.55},
     {id:'h',date:'2026-08-12',height:83.6}
   ],teeth:[{id:'t',date:'2026-08-13',number:8}]});
   assert.match(html,/data-growth="weight"[\s\S]*12\.55 kg[\s\S]*2026-08-14/);
+  assert.match(html,/data-growth="weight"[\s\S]*<time datetime="2026-08-14">2026-08-14<\/time>/);
   assert.match(html,/data-growth="height"[\s\S]*83\.6 cm[\s\S]*2026-08-12/);
   assert.match(html,/data-growth="tooth"[\s\S]*第8颗[\s\S]*2026-08-13/);
   const empty=growthView({timeline:[],measurements:[],teeth:[]});
   assert.match(empty,/data-growth="weight"[\s\S]*添加记录/);
   assert.match(empty,/data-growth="tooth"[\s\S]*记录一颗牙/);
-  const escaped=growthView({timeline:[],measurements:[{id:'x',date:'2026-08-14',weight:{toString:()=>'<img onerror=alert(1)>'}}],teeth:[]});
-  assert.doesNotMatch(escaped,/<img|NaN|Infinity/);
+  const strictlyFiltered=growthView({timeline:[],measurements:[{id:'x',date:'2026-08-14',weight:{toString:()=>'<img onerror=alert(1)>'}}],teeth:[]});
+  assert.match(strictlyFiltered,/data-growth="weight"[\s\S]*添加记录/);
+  assert.doesNotMatch(strictlyFiltered,/<img|NaN|Infinity/);
 });
 
 test('menu tabs render sorted history ranges and normalize three meal labels',()=>{

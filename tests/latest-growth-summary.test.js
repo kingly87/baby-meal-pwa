@@ -29,6 +29,14 @@ test('breaks same-date ties by updatedAt, createdAt, then id',()=>{
   assert.deepEqual(summary,{weight:{value:11,date:'2026-08-14'},height:{value:81,date:'2026-08-14'},tooth:{value:8,date:'2026-08-14'}});
 });
 
+test('preserves sub-millisecond timestamp precision before falling back to id',()=>{
+  const summary=latestGrowthSummary({measurements:[
+    {id:'z',date:'2026-08-14',weight:10,updatedAt:'2026-08-14T01:00:00.0001Z'},
+    {id:'a',date:'2026-08-14',weight:11,updatedAt:'2026-08-14T01:00:00.0002Z'}
+  ]});
+  assert.deepEqual(summary.weight,{value:11,date:'2026-08-14'});
+});
+
 test('skips malformed dates and invalid values while accepting finite zero measurements',()=>{
   const summary=latestGrowthSummary({measurements:[
     {id:'bad-date',date:'2026-02-30',weight:99,height:99},
