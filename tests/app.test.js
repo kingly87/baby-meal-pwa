@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { MemoryRepository } from '../src/db.js';
-import { loadApplicationModel, bindOnboardingActions, bindRecipeSearchInput, ensureDailySchedule, recalculateScheduleForSleep, loadDailyTrend, createTrendState, loadRenderData, runRefreshCycle, createRefreshCoordinator, createAsyncEpoch, runNotificationSchedule, runDataReplacement, changeNotificationScheduling, lockApplicationAfterCommittedReplacement, syncNotifiedTasks, updateTargetMenu, generateCurrentMenu, confirmHistoryEdit, runMenuGeneration } from '../src/app.js';
+import { loadApplicationModel, bindOnboardingActions, bindRecipeSearchInput, ensureDailySchedule, recalculateScheduleForSleep, loadDailyTrend, createTrendState, loadRenderData, runRefreshCycle, createRefreshCoordinator, createAsyncEpoch, runNotificationSchedule, runDataReplacement, changeNotificationScheduling, lockApplicationAfterCommittedReplacement, syncNotifiedTasks, generateCurrentMenu, confirmHistoryEdit, runMenuGeneration } from '../src/app.js';
 
 test('recipe search waits for Chinese IME composition to finish', () => {
   const listeners={},timers=[],input={isConnected:true,addEventListener(type,handler){listeners[type]=handler}};
@@ -28,15 +28,15 @@ test('recipe search ignores a delayed refresh after leaving the recipe page', ()
 import { createDefaultTemplate } from '../src/features/schedule/template.js';
 import { createBackup } from '../src/features/backup/backup.js';
 import { AppStore } from '../src/store.js';
-import { createMenuBrowser } from '../src/features/meals/menu-browser.js';
+import { createMenuBrowser, updateMenuAtomically } from '../src/features/meals/menu-browser.js';
 import { mealsView } from '../src/ui/meals.js';
 
 test('targeted history mutation writes only the requested weekly menu',async()=>{
   const repo=new MemoryRepository({weeklyMenus:[{id:'current',babyId:'b1',startDate:'2026-08-10',value:1},{id:'old',babyId:'b1',startDate:'2026-08-03',value:2}]});
-  await updateTargetMenu({repository:repo,weeks:await repo.list('weeklyMenus'),targetId:'old',mutate:menu=>({...menu,value:3})});
+  await updateMenuAtomically({repository:repo,menuId:'old',babyId:'b1',mutate:menu=>({...menu,value:3})});
   assert.equal((await repo.get('weeklyMenus','old')).value,3);
   assert.equal((await repo.get('weeklyMenus','current')).value,1);
-  await assert.rejects(updateTargetMenu({repository:repo,weeks:[],targetId:'missing',mutate:value=>value}),/菜单不存在/);
+  await assert.rejects(updateMenuAtomically({repository:repo,menuId:'missing',babyId:'b1',mutate:value=>value}),/菜单不存在/);
 });
 
 test('current menu generation creates 21 meals, confirms overwrite and is single flight',async()=>{

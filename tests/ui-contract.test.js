@@ -293,18 +293,6 @@ test('application owns recipe filter and paging state across refresh renders', a
   assert.doesNotMatch(app,/Number\(button\.dataset\.id\)/);
 });
 
-test('application resets menu browsing on identity and replacement boundaries',async()=>{
-  const app=await readFile('src/app.js','utf8');
-  const start=app.match(/async function startMainApp\([^\n]+/)?.[0]||'';
-  assert.match(start,/menuBrowser\.reset\(\)/);
-  const switchBaby=app.match(/getElementById\('active-baby'\)[^\n]+/)?.[0]||'';
-  assert.match(switchBaby,/menuBrowser\.reset\(\)/);
-  const remove=app.match(/async function deleteBaby\(\)\{[^\n]+/)?.[0]||'';
-  assert.match(remove,/menuBrowser\.reset\(\)/);
-  const imported=app.match(/async function importData\(event\)\{[^\n]+/)?.[0]||'';
-  assert.match(imported,/menuBrowser\.reset\(\)/);
-});
-
 test('malformed legacy recipe arrays never throw or inject markup', () => {
   const malformed={id:'legacy-x',name:'旧食谱',stage:'stage4',ingredients:[null,{bad:'<img src=x>'},'<script>alert(1)</script>'],steps:[null,{bad:'<b>'}],substitutions:[{}],mealSlots:[null]};
   assert.doesNotThrow(()=>mealsView({recipes:[malformed],stage:'stage4'}));

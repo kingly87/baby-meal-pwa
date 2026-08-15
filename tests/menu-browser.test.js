@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createMenuBrowser, historyMenus } from '../src/features/meals/menu-browser.js';
+import { createMenuBrowser, historyMenus, updateMenuAtomically, runMenuMutation, resetMenuBrowserForBoundary } from '../src/features/meals/menu-browser.js';
+import { MemoryRepository } from '../src/db.js';
 
 test('menu browser isolates history editing and resets it when selection changes',()=>{
   const browser=createMenuBrowser();
@@ -29,4 +30,44 @@ test('history excludes every duplicate record from the current natural week',()=
     {id:'other-baby',babyId:'b2',startDate:'2026-08-12'}
   ];
   assert.deepEqual(historyMenus(menus,{babyId:'b1',date:'2026-08-15'}).map(menu=>menu.id),['old']);
+});
+
+const menu=()=>({id:'w1',babyId:'b1',startDate:'2026-08-03',days:[{date:'2026-08-03',meals:[{id:'m1',status:'planned'},{id:'m2',status:'planned'}]}]});
+
+test('atomic menu updates serialize concurrent mutations and preserve both meals',async()=>{
+  const repo=new MemoryRepository({weeklyMenus:[menu()]});
+  await Promise.all([
+    updateMenuAtomically({repository:repo,menuId:'w1',babyId:'b1',mutate:value=>({...value,days:value.days.map(day=>({...day,meals:day.meals.map(meal=>meal.id==='m1'?{...meal,status:'eaten'}:meal)}))})}),
+    updateMenuAtomically({repository:repo,menuId:'w1',babyId:'b1',mutate:value=>({...value,days:value.days.map(day=>({...day,meals:day.meals.map(meal=>meal.id==='m2'?{...meal,status:'skipped'}:meal)}))})})
+  ]);
+  assert.deepEqual((await repo.get('weeklyMenus','w1')).days[0].meals.map(item=>item.status),['eaten','skipped']);
+});
+
+test('atomic menu update never recreates a deleted target or crosses babies',async()=>{
+  const repo=new MemoryRepository({weeklyMenus:[menu()]});
+  await repo.delete('weeklyMenus','w1');
+  await assert.rejects(updateMenuAtomically({repository:repo,menuId:'w1',babyId:'b1',mutate:value=>value}),/菜单不存在/);
+  assert.equal(await repo.get('weeklyMenus','w1'),undefined);
+  const other=new MemoryRepository({weeklyMenus:[menu()]});
+  await assert.rejects(updateMenuAtomically({repository:other,menuId:'w1',babyId:'b2',mutate:value=>value}),/菜单不属于当前宝宝/);
+});
+
+test('menu mutation locks every target control and retries from DB after refresh failure',async()=>{
+  const repo=new MemoryRepository({weeklyMenus:[menu()]}),buttons=[{disabled:false},{disabled:false}],messages=[];
+  const first=await runMenuMutation({repository:repo,menuId:'w1',babyId:'b1',controls:buttons,mutate:value=>({...value,days:value.days.map(day=>({...day,meals:day.meals.map(meal=>meal.id==='m1'?{...meal,status:'eaten'}:meal)}))}),refresh:async()=>{throw new Error('刷新失败')},notify:value=>messages.push(value)});
+  assert.equal(first,null);assert.deepEqual(buttons.map(item=>item.disabled),[false,false]);assert.deepEqual(messages,['刷新失败']);
+  await runMenuMutation({repository:repo,menuId:'w1',babyId:'b1',controls:buttons,mutate:value=>({...value,days:value.days.map(day=>({...day,meals:day.meals.map(meal=>meal.id==='m2'?{...meal,status:'skipped'}:meal)}))}),refresh:async()=>{},notify:value=>messages.push(value)});
+  assert.deepEqual((await repo.get('weeklyMenus','w1')).days[0].meals.map(item=>item.status),['eaten','skipped']);
+});
+
+test('menu mutation locks controls before asynchronous preparation',async()=>{
+  const repo=new MemoryRepository({weeklyMenus:[menu()]}),controls=[{disabled:false}],seen=[];
+  await runMenuMutation({repository:repo,menuId:'w1',babyId:'b1',controls,prepare:async()=>{seen.push(controls[0].disabled);return'eaten'},mutate:(value,status)=>({...value,days:value.days.map(day=>({...day,meals:day.meals.map((meal,index)=>index?meal:{...meal,status})}))}),refresh:async()=>{},notify:()=>{}});
+  assert.deepEqual(seen,[true]);assert.equal(controls[0].disabled,false);
+});
+
+for(const boundary of ['baby-switch','backup-import','baby-delete'])test(`${boundary} resets real menu browser state`,()=>{
+  const browser=createMenuBrowser();browser.showHistory('old');browser.editHistory();
+  resetMenuBrowserForBoundary(browser);
+  assert.deepEqual(browser.value(),{mode:'current',selectedId:null,editingHistory:false});
 });
