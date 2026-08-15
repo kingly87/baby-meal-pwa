@@ -148,17 +148,40 @@ test('replacement preserves the target meal type and its safety rules', () => {
   assert.equal(changed.days[0].meals[0].recipeId, 'breakfast-2');
 });
 
-test('explicit legacy mealCount maps to the first default meal types', () => {
+test('explicit legacy mealCount maps one and two meals to lunch and dinner', () => {
   const catalog = [
     mealSlotRecipe('breakfast', ['早餐']),
     mealSlotRecipe('lunch', ['午餐']),
     mealSlotRecipe('dinner', ['晚餐'])
   ];
-  const week = generateWeek(catalog, {
+  const twoMealWeek = generateWeek(catalog, {
     babyId: 'b1', stage: 'stage4', startDate: '2026-08-11', mealCount: 2,
     random: () => 0, createId: (() => { let id = 0; return () => `id-${++id}`; })()
   });
-  assert.deepEqual(week.days[0].meals.map(meal => meal.mealType), ['breakfast', 'lunch']);
+  const oneMealWeek = generateWeek(catalog, {
+    babyId: 'b1', stage: 'stage4', startDate: '2026-08-11', mealCount: 1,
+    random: () => 0, createId: (() => { let id = 0; return () => `one-${++id}`; })()
+  });
+  assert.deepEqual(twoMealWeek.days[0].meals.map(meal => meal.mealType), ['lunch', 'dinner']);
+  assert.deepEqual(oneMealWeek.days[0].meals.map(meal => meal.mealType), ['lunch']);
+});
+
+test('legacy mealCount calls generate from real stage1 to stage3 catalogs without breakfast slots', () => {
+  for (const stage of ['stage1', 'stage2', 'stage3']) {
+    let sequence = 0;
+    const oneMealWeek = generateWeek(recipes, {
+      babyId: 'b1', stage, startDate: '2026-08-11', mealCount: 1,
+      random: () => 0, createId: () => `${stage}-one-${++sequence}`
+    });
+    const twoMealWeek = generateWeek(recipes, {
+      babyId: 'b1', stage, startDate: '2026-08-11', mealCount: 2,
+      random: () => 0, createId: () => `${stage}-two-${++sequence}`
+    });
+    assert.equal(oneMealWeek.days.flatMap(day => day.meals).length, 7, stage);
+    assert.ok(oneMealWeek.days.flatMap(day => day.meals).every(meal => meal.mealType === 'lunch'), stage);
+    assert.equal(twoMealWeek.days.flatMap(day => day.meals).length, 14, stage);
+    assert.deepEqual(twoMealWeek.days[0].meals.map(meal => meal.mealType), ['lunch', 'dinner'], stage);
+  }
 });
 
 test('weekly generation does not mutate inputs', () => {

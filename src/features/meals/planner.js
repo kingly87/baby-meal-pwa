@@ -20,7 +20,10 @@ function candidatesForMealType(candidates, mealType) {
 
 function resolveMealTypes(options) {
   if (Object.hasOwn(options, 'mealTypes')) return options.mealTypes;
-  if (Object.hasOwn(options, 'mealCount')) return DEFAULT_MEAL_TYPES.slice(0, Math.min(3, Math.max(1, options.mealCount)));
+  if (Object.hasOwn(options, 'mealCount')) {
+    const mealCount = Math.min(3, Math.max(1, Math.ceil(options.mealCount)));
+    return mealCount === 1 ? ['lunch'] : mealCount === 2 ? ['lunch', 'dinner'] : DEFAULT_MEAL_TYPES;
+  }
   return DEFAULT_MEAL_TYPES;
 }
 
