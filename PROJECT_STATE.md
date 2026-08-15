@@ -5,7 +5,9 @@
 - Service Worker cache revision is `baby-growth-v1-20260720-r29`; the application shell includes every JavaScript file under `src`, including `src/features/growth/latest-summary.js`.
 - Automated Service Worker tests verify app-owned obsolete-cache cleanup, current-cache-only reads, navigation network-first behavior, and asset cache-first behavior.
 - Real `previewBackup` tests accept legacy natural-week menus, exact-date menus, and legacy schedule templates that retain `napToMealMinutes`.
-- Automated verification: `npm.cmd test` passed all 305 tests. Manual browser acceptance for this release has not been performed and remains for the final release owner.
+- Automated verification: `npm.cmd test` passed all 307 tests.
+- Manual browser acceptance at 375px confirmed a menu generated from 2026-08-15 through 2026-08-21 with 21 breakfast/lunch/dinner meals; growth cards showed the latest weight, height, and tooth values with dates; a nine-record timeline stayed within its 288px internally scrollable region and its native eight-option filter worked.
+- Manual browser acceptance at both 375px and 320px found no page-level horizontal overflow in Settings, all checked controls remained at least 44px high, and the schedule dialog no longer contained `napToMealMinutes`.
 
 ## 2026-08-15 Final mobile acceptance fix
 
