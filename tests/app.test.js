@@ -1,7 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { MemoryRepository } from '../src/db.js';
-import { loadApplicationModel, bindOnboardingActions, bindRecipeSearchInput, ensureDailySchedule, recalculateScheduleForSleep, loadDailyTrend, createTrendState, loadRenderData, runRefreshCycle, createRefreshCoordinator, createAsyncEpoch, runNotificationSchedule, runDataReplacement, changeNotificationScheduling, lockApplicationAfterCommittedReplacement, syncNotifiedTasks, generateCurrentMenu, confirmHistoryEdit, runMenuGeneration, runMenuGenerationClick } from '../src/app.js';
+import { loadApplicationModel, bindOnboardingActions, bindRecipeSearchInput, ensureDailySchedule, recalculateScheduleForSleep, loadDailyTrend, createTrendState, loadRenderData, runRefreshCycle, createRefreshCoordinator, createAsyncEpoch, runNotificationSchedule, runDataReplacement, changeNotificationScheduling, lockApplicationAfterCommittedReplacement, syncNotifiedTasks, generateCurrentMenu, confirmHistoryEdit, runMenuGeneration, runMenuGenerationClick, growthViewProps } from '../src/app.js';
+
+test('growth view props use already loaded data and isolate the active baby',()=>{
+  const allData={growthMeasurements:[{id:'a',babyId:'b1'},{id:'b',babyId:'b2'}],toothRecords:[{id:'t1',babyId:'b1'},{id:'t2',babyId:'b2'}]};
+  assert.deepEqual(growthViewProps(allData,'b2'),{measurements:[allData.growthMeasurements[1]],teeth:[allData.toothRecords[1]]});
+});
 
 test('recipe search waits for Chinese IME composition to finish', () => {
   const listeners={},timers=[],input={isConnected:true,addEventListener(type,handler){listeners[type]=handler}};
