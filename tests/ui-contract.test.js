@@ -175,6 +175,35 @@ test('meal and growth screens expose shopping, preferences and tooth actions', (
   assert.match(chartSvg({ready:true,min:8,max:9,points:[{x:0,y:1,value:8,date:'2026-07-20'},{x:1,y:0,value:9,date:'2026-07-21'}]}),/<polyline/);
 });
 
+test('menu tabs render sorted history ranges and normalize three meal labels',()=>{
+  const current={id:'now',startDate:'2026-08-10',days:[{date:'2026-08-10',meals:[{id:'b',name:'粥'},{id:'l',name:'饭'},{id:'d',name:'面'}]}]};
+  const old={id:'old',startDate:'2026-08-03',days:[{date:'2026-08-03',meals:[{id:'ol',name:'午饭'},{id:'od',name:'晚饭'}]}]};
+  const html=mealsView({week:current,weeks:[old,current],menuBrowser:{mode:'current',selectedId:null,editingHistory:false}});
+  assert.match(html,/data-action="menu-current"/);
+  assert.match(html,/data-action="menu-history"/);
+  assert.match(html,/早餐/);assert.match(html,/午餐/);assert.match(html,/晚餐/);
+  assert.match(html,/2026-08-03[^<]*至[^<]*2026-08-09/);
+  assert.deepEqual(current.days[0].meals.map(meal=>meal.mealType),[undefined,undefined,undefined]);
+});
+
+test('history is read only until explicitly editing the selected week',()=>{
+  const old={id:'old',startDate:'2026-08-03',days:[{date:'2026-08-03',meals:[{id:'m',name:'午饭'},{id:'d',name:'晚饭'}]}]};
+  const readonly=mealsView({week:null,weeks:[old],menuBrowser:{mode:'history',selectedId:'old',editingHistory:false}});
+  assert.match(readonly,/data-action="edit-history"/);
+  assert.doesNotMatch(readonly,/data-action="replace-meal"|data-action="meal-status"/);
+  const editable=mealsView({week:null,weeks:[old],menuBrowser:{mode:'history',selectedId:'old',editingHistory:true}});
+  assert.match(editable,/data-menu-id="old"/);
+  assert.match(editable,/data-action="replace-meal"/);
+});
+
+test('menu history mobile styles wrap controls and long text safely',async()=>{
+  const css=await readFile('assets/styles/app.css','utf8');
+  assert.match(css,/\.menu-tabs[^}]*minmax\(0,1fr\)/s);
+  assert.match(css,/\.history-list[^}]*overflow-wrap:anywhere/s);
+  assert.match(css,/\.meal-type[^}]*white-space:nowrap/s);
+  assert.match(css,/@media\(max-width:380px\)[\s\S]*\.meal-row[^}]*grid-template-columns:1fr/s);
+});
+
 const detailedRecipe={
   id:7001,name:'<南瓜&牛肉软饭>',stage:'stage4',stageName:'咀嚼练习期',group:'软饭',staple:'米饭',texture:'软饭',
   ingredients:['熟米饭 45g','南瓜 20g','牛肉 15g'],steps:['食材蒸熟','压拌成团'],chewingLevel:'beginner-chewing',
@@ -255,6 +284,19 @@ test('application owns recipe filter and paging state across refresh renders', a
   assert.match(app,/recipeBrowser=readRecipeFilters\(\)/);
   assert.match(app,/recipeBrowser=\{\.\.\.recipeBrowser,limit:recipeBrowser\.limit\+24\}/);
   assert.doesNotMatch(app,/Number\(button\.dataset\.id\)/);
+});
+
+test('application resets menu browsing on identity and replacement boundaries',async()=>{
+  const app=await readFile('src/app.js','utf8');
+  const start=app.match(/async function startMainApp\([^\n]+/)?.[0]||'';
+  assert.match(start,/menuBrowser\.reset\(\)/);
+  const switchBaby=app.match(/getElementById\('active-baby'\)[^\n]+/)?.[0]||'';
+  assert.match(switchBaby,/menuBrowser\.reset\(\)/);
+  const remove=app.match(/async function deleteBaby\(\)\{[^\n]+/)?.[0]||'';
+  assert.match(remove,/menuBrowser\.reset\(\)/);
+  const imported=app.match(/async function importData\(event\)\{[^\n]+/)?.[0]||'';
+  assert.match(imported,/menuBrowser\.reset\(\)/);
+  assert.match(app,/confirm\('正在修改过去的饮食记录，是否继续？'\)/);
 });
 
 test('malformed legacy recipe arrays never throw or inject markup', () => {

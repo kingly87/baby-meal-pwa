@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { MemoryRepository } from '../src/db.js';
-import { loadApplicationModel, bindOnboardingActions, bindRecipeSearchInput, ensureDailySchedule, recalculateScheduleForSleep, loadDailyTrend, createTrendState, loadRenderData, runRefreshCycle, createRefreshCoordinator, createAsyncEpoch, runNotificationSchedule, runDataReplacement, changeNotificationScheduling, lockApplicationAfterCommittedReplacement, syncNotifiedTasks } from '../src/app.js';
+import { loadApplicationModel, bindOnboardingActions, bindRecipeSearchInput, ensureDailySchedule, recalculateScheduleForSleep, loadDailyTrend, createTrendState, loadRenderData, runRefreshCycle, createRefreshCoordinator, createAsyncEpoch, runNotificationSchedule, runDataReplacement, changeNotificationScheduling, lockApplicationAfterCommittedReplacement, syncNotifiedTasks, updateTargetMenu, generateCurrentMenu } from '../src/app.js';
 
 test('recipe search waits for Chinese IME composition to finish', () => {
   const listeners={},timers=[],input={isConnected:true,addEventListener(type,handler){listeners[type]=handler}};
@@ -28,6 +28,33 @@ test('recipe search ignores a delayed refresh after leaving the recipe page', ()
 import { createDefaultTemplate } from '../src/features/schedule/template.js';
 import { createBackup } from '../src/features/backup/backup.js';
 import { AppStore } from '../src/store.js';
+
+test('targeted history mutation writes only the requested weekly menu',async()=>{
+  const repo=new MemoryRepository({weeklyMenus:[{id:'current',babyId:'b1',startDate:'2026-08-10',value:1},{id:'old',babyId:'b1',startDate:'2026-08-03',value:2}]});
+  await updateTargetMenu({repository:repo,weeks:await repo.list('weeklyMenus'),targetId:'old',mutate:menu=>({...menu,value:3})});
+  assert.equal((await repo.get('weeklyMenus','old')).value,3);
+  assert.equal((await repo.get('weeklyMenus','current')).value,1);
+  await assert.rejects(updateTargetMenu({repository:repo,weeks:[],targetId:'missing',mutate:value=>value}),/菜单不存在/);
+});
+
+test('current menu generation creates 21 meals, confirms overwrite and is single flight',async()=>{
+  let calls=0,release;
+  const pending=new Promise(resolve=>{release=resolve});
+  const generated={id:'new',babyId:'b1',startDate:'2026-08-10',days:Array.from({length:7},()=>({meals:[{},{},{}]}))};
+  const options={repository:{},weeks:[{id:'current'}],current:{id:'current'},baby:{id:'b1',stage:'stage4'},recipes:[],date:'2026-08-15',confirm:()=>true,generate:(catalog,input)=>{calls++;assert.equal(input.startDate,'2026-08-10');assert.equal(Object.hasOwn(input,'mealCount'),false);return generated},save:async()=>{await pending}};
+  const first=generateCurrentMenu(options),second=generateCurrentMenu(options);
+  assert.strictEqual(first,second);
+  assert.equal(calls,1);
+  release();
+  assert.strictEqual(await first,generated);
+  assert.equal(generated.days.flatMap(day=>day.meals).length,21);
+});
+
+test('current menu overwrite cancellation preserves storage',async()=>{
+  let generated=false,saved=false;
+  const result=await generateCurrentMenu({repository:{},weeks:[],current:{id:'current'},baby:{id:'b1',stage:'stage4'},recipes:[],date:'2026-08-15',confirm:message=>{assert.match(message,/覆盖/);return false},generate:()=>{generated=true},save:async()=>{saved=true}});
+  assert.equal(result,null);assert.equal(generated,false);assert.equal(saved,false);
+});
 
 test('startup requests onboarding when there is no baby', async () => {
   const repo=new MemoryRepository();
