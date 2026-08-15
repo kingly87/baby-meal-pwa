@@ -41,13 +41,14 @@ test('targeted history mutation writes only the requested weekly menu',async()=>
 });
 
 test('current menu generation uses the requested local date, creates 21 meals, confirms same-date overwrite and is single flight',async()=>{
-  let calls=0,release;
+  let calls=0,confirmations=0,release;
   const pending=new Promise(resolve=>{release=resolve});
   const generated={id:'new',babyId:'b1',startDate:'2026-08-15',days:Array.from({length:7},(_,index)=>({date:`2026-08-${15+index}`,meals:[{},{},{}]}))};
-  const options={repository:{},weeks:[{id:'current'}],current:{id:'current',startDate:'2026-08-15'},baby:{id:'b1',stage:'stage4'},recipes:[],date:'2026-08-15',confirm:()=>true,generate:(catalog,input)=>{calls++;assert.equal(input.startDate,'2026-08-15');assert.equal(Object.hasOwn(input,'mealCount'),false);return generated},save:async()=>{await pending}};
+  const options={repository:{},weeks:[{id:'current'}],current:{id:'current',startDate:'2026-08-15'},baby:{id:'b1',stage:'stage4'},recipes:[],date:'2026-08-15',confirm:()=>{confirmations++;return true},generate:(catalog,input)=>{calls++;assert.equal(input.startDate,'2026-08-15');assert.equal(Object.hasOwn(input,'mealCount'),false);return generated},save:async()=>{await pending}};
   const first=generateCurrentMenu(options),second=generateCurrentMenu(options);
   assert.strictEqual(first,second);
   assert.equal(calls,1);
+  assert.equal(confirmations,1);
   release();
   assert.strictEqual(await first,generated);
   assert.equal(generated.days.flatMap(day=>day.meals).length,21);
@@ -68,6 +69,44 @@ test('menu generation with the real stage4 catalog produces three meals for seve
   assert.equal(generated.startDate,'2026-08-15');
   assert.deepEqual(generated.days.map(day=>day.date),['2026-08-15','2026-08-16','2026-08-17','2026-08-18','2026-08-19','2026-08-20','2026-08-21']);
   assert.equal(generated.days.flatMap(day=>day.meals).length,21);
+});
+
+test('menu generation isolates flights by exact date for the same baby and repository',async()=>{
+  const repository={},generatedDates=[];
+  const generate=(_catalog,input)=>{generatedDates.push(input.startDate);return{id:input.startDate,babyId:'b1',startDate:input.startDate,days:[]}};
+  const shared={repository,weeks:[],current:null,baby:{id:'b1',stage:'stage4'},recipes:[],generate,save:async()=>{}};
+  const first=generateCurrentMenu({...shared,date:'2026-08-15'}),second=generateCurrentMenu({...shared,date:'2026-08-16'});
+  assert.notStrictEqual(first,second);
+  assert.deepEqual((await Promise.all([first,second])).map(menu=>menu.startDate),['2026-08-15','2026-08-16']);
+  assert.deepEqual(generatedDates,['2026-08-15','2026-08-16']);
+});
+
+test('menu generation isolates flights across repositories',async()=>{
+  let calls=0;
+  const options={weeks:[],current:null,baby:{id:'b1',stage:'stage4'},recipes:[],date:'2026-08-15',generate:()=>({id:`m${++calls}`,babyId:'b1',startDate:'2026-08-15',days:[]}),save:async()=>{}};
+  const first=generateCurrentMenu({...options,repository:{}}),second=generateCurrentMenu({...options,repository:{}});
+  assert.notStrictEqual(first,second);
+  await Promise.all([first,second]);
+  assert.equal(calls,2);
+});
+
+test('menu generation confirms against the latest stored exact-date menu',async()=>{
+  const repository=new MemoryRepository({weeklyMenus:[{id:'stored',babyId:'b1',startDate:'2026-08-15',days:[]}]});
+  let generated=false,saved=false,confirmations=0;
+  const result=await generateCurrentMenu({repository,weeks:[{id:'old',babyId:'b1',startDate:'2026-08-10'}],current:{id:'old',startDate:'2026-08-10'},baby:{id:'b1',stage:'stage4'},recipes:[],date:'2026-08-15',confirm:()=>{confirmations++;return false},generate:()=>{generated=true},save:async()=>{saved=true}});
+  assert.equal(result,null);
+  assert.equal(confirmations,1);
+  assert.equal(generated,false);
+  assert.equal(saved,false);
+  assert.equal((await repository.get('weeklyMenus','stored')).id,'stored');
+});
+
+test('failed menu generation clears its scoped flight for retry',async()=>{
+  const repository={};let attempts=0;
+  const options={repository,weeks:[],current:null,baby:{id:'retry-baby',stage:'stage4'},recipes:[],date:'2026-08-15',generate:()=>{attempts++;if(attempts===1)throw new Error('first failure');return{id:'retry',babyId:'retry-baby',startDate:'2026-08-15',days:[]}},save:async()=>{}};
+  await assert.rejects(generateCurrentMenu(options),/first failure/);
+  assert.equal((await generateCurrentMenu(options)).id,'retry');
+  assert.equal(attempts,2);
 });
 
 test('current menu overwrite cancellation preserves storage',async()=>{
