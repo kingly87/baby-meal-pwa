@@ -2,9 +2,9 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { MemoryRepository } from '../src/db.js';
 import {
-  findMenuForWeek,
+  findMenuForDate,
   normalizeMenu,
-  saveCurrentWeek,
+  saveCurrentMenu,
   weekRange,
   weekStart
 } from '../src/features/meals/week-menu.js';
@@ -36,23 +36,23 @@ test('weekStart normalizes a local calendar date to Monday', () => {
   assert.equal(weekStart('2026-08-10'), '2026-08-10');
 });
 
-test('saveCurrentWeek adds a menu for a new natural week with one put', async () => {
+test('saveCurrentMenu adds a menu for an exact date with one put', async () => {
   const repository = new TrackingMemoryRepository();
   const generated = { id: 'new-menu', babyId: 'baby-1', startDate: '2026-08-17', days: [] };
 
-  const saved = await saveCurrentWeek(repository, [], generated, '2026-08-18T01:02:03.000Z');
+  const saved = await saveCurrentMenu(repository, [], generated, '2026-08-18T01:02:03.000Z');
 
   assert.deepEqual(saved, { ...generated, createdAt: '2026-08-18T01:02:03.000Z', updatedAt: '2026-08-18T01:02:03.000Z' });
   assert.equal(repository.puts.length, 1);
   assert.notEqual(repository.puts[0][1], generated);
 });
 
-test('saveCurrentWeek updates the same baby week while keeping stable identity and timestamps', async () => {
+test('saveCurrentMenu updates the same baby date while keeping stable identity and timestamps', async () => {
   const existing = { id: 'stable-id', babyId: 'baby-1', startDate: '2026-08-10', createdAt: 'old-created', updatedAt: 'old-updated', days: [{ date: '2026-08-10', meals: [] }] };
   const repository = new TrackingMemoryRepository({ weeklyMenus: [existing] });
-  const generated = { id: 'throwaway-id', babyId: 'baby-1', startDate: '2026-08-12', createdAt: 'new-created', title: 'new content', days: [{ date: '2026-08-12', meals: [{ id: 'meal' }] }] };
+  const generated = { id: 'throwaway-id', babyId: 'baby-1', startDate: '2026-08-10', createdAt: 'new-created', title: 'new content', days: [{ date: '2026-08-10', meals: [{ id: 'meal' }] }] };
 
-  const saved = await saveCurrentWeek(repository, [existing], generated, '2026-08-15T08:00:00.000Z');
+  const saved = await saveCurrentMenu(repository, [existing], generated, '2026-08-15T08:00:00.000Z');
 
   assert.equal(repository.puts.length, 1);
   assert.deepEqual(saved, {
@@ -63,20 +63,20 @@ test('saveCurrentWeek updates the same baby week while keeping stable identity a
   });
 });
 
-test('saveCurrentWeek leaves other babies and weeks untouched', async () => {
+test('saveCurrentMenu leaves other babies and dates untouched', async () => {
   const menus = [
     { id: 'other-week', babyId: 'baby-1', startDate: '2026-08-03', createdAt: 'a' },
     { id: 'other-baby', babyId: 'baby-2', startDate: '2026-08-10', createdAt: 'b' }
   ];
   const repository = new TrackingMemoryRepository({ weeklyMenus: menus });
-  await saveCurrentWeek(repository, menus, { id: 'new', babyId: 'baby-1', startDate: '2026-08-10', days: [] });
+  await saveCurrentMenu(repository, menus, { id: 'new', babyId: 'baby-1', startDate: '2026-08-10', days: [] });
   assert.equal(repository.puts.length, 1);
   assert.equal(repository.puts[0][1].id, 'new');
   assert.deepEqual(repository.deletes, []);
   assert.deepEqual((await repository.list('weeklyMenus')).map(menu => menu.id).sort(), ['new', 'other-baby', 'other-week']);
 });
 
-test('saveCurrentWeek rejects invalid generated identity before writing', async () => {
+test('saveCurrentMenu rejects invalid generated identity before writing', async () => {
   for (const generated of [
     { id: 'x', startDate: '2026-08-10' },
     { id: 'x', babyId: '', startDate: '2026-08-10' },
@@ -84,12 +84,12 @@ test('saveCurrentWeek rejects invalid generated identity before writing', async 
     { id: 'x', babyId: 'baby-1', startDate: '2026-02-30' }
   ]) {
     const repository = new TrackingMemoryRepository();
-    await assert.rejects(saveCurrentWeek(repository, [], generated), /babyId|startDate/);
+    await assert.rejects(saveCurrentMenu(repository, [], generated), /babyId|startDate/);
     assert.equal(repository.puts.length, 0);
   }
 });
 
-test('saveCurrentWeek does not mutate menus, existing, or generated inputs', async () => {
+test('saveCurrentMenu does not mutate menus, existing, or generated inputs', async () => {
   const existing = { id: 'stable', babyId: 'baby-1', startDate: '2026-08-10', createdAt: 'created', days: [{ meals: [{ id: 'old' }] }] };
   const menus = [existing];
   const generated = { id: 'new', babyId: 'baby-1', startDate: '2026-08-15', createdAt: 'new-created', days: [{ meals: [{ id: 'new-meal' }] }] };
@@ -97,23 +97,23 @@ test('saveCurrentWeek does not mutate menus, existing, or generated inputs', asy
   const generatedSnapshot = structuredClone(generated);
   const repository = new TrackingMemoryRepository({ weeklyMenus: [existing] });
 
-  await saveCurrentWeek(repository, menus, generated, '2026-08-15T08:00:00.000Z');
+  await saveCurrentMenu(repository, menus, generated, '2026-08-15T08:00:00.000Z');
 
   assert.deepEqual(menus, menusSnapshot);
   assert.deepEqual(existing, menusSnapshot[0]);
   assert.deepEqual(generated, generatedSnapshot);
 });
 
-test('saveCurrentWeek refreshes stale snapshots and removes only duplicate records in the target baby week', async () => {
+test('saveCurrentMenu refreshes stale snapshots and removes only duplicate records on the target date', async () => {
   const repository = new TrackingMemoryRepository({ weeklyMenus: [
-    { id: 'later', babyId: 'baby-1', startDate: '2026-08-12', createdAt: '2026-08-12T00:00:00.000Z' },
+    { id: 'later', babyId: 'baby-1', startDate: '2026-08-10', createdAt: '2026-08-12T00:00:00.000Z' },
     { id: 'keeper', babyId: 'baby-1', startDate: '2026-08-10', createdAt: '2026-08-10T00:00:00.000Z' },
     { id: 'other-week', babyId: 'baby-1', startDate: '2026-08-03' },
     { id: 'other-baby', babyId: 'baby-2', startDate: '2026-08-10' }
   ] });
 
-  const saved = await saveCurrentWeek(repository, [], {
-    id: 'generated', babyId: 'baby-1', startDate: '2026-08-15', days: [{ meals: [] }]
+  const saved = await saveCurrentMenu(repository, [], {
+    id: 'generated', babyId: 'baby-1', startDate: '2026-08-10', days: [{ meals: [] }]
   }, '2026-08-15T08:00:00.000Z');
 
   assert.equal(saved.id, 'keeper');
@@ -122,25 +122,25 @@ test('saveCurrentWeek refreshes stale snapshots and removes only duplicate recor
   assert.deepEqual((await repository.list('weeklyMenus')).map(menu => menu.id).sort(), ['keeper', 'other-baby', 'other-week']);
 });
 
-test('saveCurrentWeek breaks equal-createdAt duplicate ties by stable id order', async () => {
+test('saveCurrentMenu breaks equal-createdAt duplicate ties by stable id order', async () => {
   const repository = new TrackingMemoryRepository({ weeklyMenus: [
     { id: 'z-menu', babyId: 'baby-1', startDate: '2026-08-10', createdAt: '2026-08-10T00:00:00.000Z' },
-    { id: 'a-menu', babyId: 'baby-1', startDate: '2026-08-11', createdAt: '2026-08-10T00:00:00.000Z' }
+    { id: 'a-menu', babyId: 'baby-1', startDate: '2026-08-10', createdAt: '2026-08-10T00:00:00.000Z' }
   ] });
 
-  const saved = await saveCurrentWeek(repository, [], { id: 'new', babyId: 'baby-1', startDate: '2026-08-15' }, '2026-08-15T08:00:00.000Z');
+  const saved = await saveCurrentMenu(repository, [], { id: 'new', babyId: 'baby-1', startDate: '2026-08-10' }, '2026-08-15T08:00:00.000Z');
 
   assert.equal(saved.id, 'a-menu');
   assert.deepEqual(repository.deletes, [['weeklyMenus', 'z-menu']]);
 });
 
-test('saveCurrentWeek serializes concurrent first writes into one menu', async () => {
+test('saveCurrentMenu serializes concurrent first writes for the same date into one menu', async () => {
   const repository = new SerializableMemoryRepository();
   const now = '2026-08-15T08:00:00.000Z';
 
   await Promise.all([
-    saveCurrentWeek(repository, [], { id: 'generated-b', babyId: 'baby-1', startDate: '2026-08-10', days: [] }, now),
-    saveCurrentWeek(repository, [], { id: 'generated-a', babyId: 'baby-1', startDate: '2026-08-15', days: [] }, now)
+    saveCurrentMenu(repository, [], { id: 'generated-b', babyId: 'baby-1', startDate: '2026-08-15', days: [] }, now),
+    saveCurrentMenu(repository, [], { id: 'generated-a', babyId: 'baby-1', startDate: '2026-08-15', days: [] }, now)
   ]);
 
   const menus = await repository.list('weeklyMenus', { babyId: 'baby-1' });
@@ -235,19 +235,37 @@ test('normalizeMenu safely clones abnormal days without inventing meal types', (
   assert.deepEqual(normalized.days[1], { note: 'missing meals' });
 });
 
-test('findMenuForWeek matches only the same baby and natural week', () => {
+test('findMenuForDate matches only the same baby and exact valid date', () => {
   const menus = [
     { id: 'other-baby', babyId: 'baby-2', startDate: '2026-08-10', days: [] },
     { id: 'previous-week', babyId: 'baby-1', startDate: '2026-08-03', days: [] },
-    { id: 'expected', babyId: 'baby-1', startDate: '2026-08-12', days: [] }
+    { id: 'same-week-not-current', babyId: 'baby-1', startDate: '2026-08-10', days: [] },
+    { id: 'expected', babyId: 'baby-1', startDate: '2026-08-15', days: [] }
   ];
-  const found = findMenuForWeek(menus, { babyId: 'baby-1', date: '2026-08-15' });
+  const found = findMenuForDate(menus, { babyId: 'baby-1', date: '2026-08-15' });
   assert.equal(found.id, 'expected');
-  assert.notEqual(found, menus[2]);
+  assert.notEqual(found, menus[3]);
 });
 
-test('findMenuForWeek returns null for missing or invalid menu arrays', () => {
-  assert.equal(findMenuForWeek([], { babyId: 'baby-1', date: '2026-08-15' }), null);
-  assert.equal(findMenuForWeek(null, { babyId: 'baby-1', date: '2026-08-15' }), null);
-  assert.equal(findMenuForWeek({}, { babyId: 'baby-1', date: '2026-08-15' }), null);
+test('findMenuForDate returns null for missing arrays and rejects invalid target dates', () => {
+  assert.equal(findMenuForDate([], { babyId: 'baby-1', date: '2026-08-15' }), null);
+  assert.equal(findMenuForDate(null, { babyId: 'baby-1', date: '2026-08-15' }), null);
+  assert.equal(findMenuForDate({}, { babyId: 'baby-1', date: '2026-08-15' }), null);
+  assert.throws(() => findMenuForDate([], { babyId: 'baby-1', date: '2026-02-30' }), /菜单日期无效|鑿滃崟鏃ユ湡鏃犳晥/);
+});
+
+test('saveCurrentMenu keeps only the six newest exact-date menus for one baby', async () => {
+  const old = Array.from({ length: 6 }, (_, index) => ({ id: `m${index + 1}`, babyId: 'baby-1', startDate: `2026-08-0${index + 1}`, updatedAt: `2026-08-0${index + 1}T00:00:00.000Z` }));
+  const repository = new TrackingMemoryRepository({ weeklyMenus: [...old, { id: 'other', babyId: 'baby-2', startDate: '2026-01-01' }] });
+  await saveCurrentMenu(repository, [], { id: 'new', babyId: 'baby-1', startDate: '2026-08-15' }, '2026-08-15T00:00:00.000Z');
+  assert.deepEqual((await repository.list('weeklyMenus', { babyId: 'baby-1' })).map(menu => menu.id).sort(), ['m2', 'm3', 'm4', 'm5', 'm6', 'new']);
+  assert.ok(await repository.get('weeklyMenus', 'other'));
+});
+
+test('saveCurrentMenu rolls back put and pruning when a delete fails', async () => {
+  class FailingRepository extends TrackingMemoryRepository { async delete(store, id) { if (id === 'm1') throw new Error('delete failed'); return super.delete(store, id); } }
+  const old = Array.from({ length: 6 }, (_, index) => ({ id: `m${index + 1}`, babyId: 'baby-1', startDate: `2026-08-0${index + 1}` }));
+  const repository = new FailingRepository({ weeklyMenus: old });
+  await assert.rejects(saveCurrentMenu(repository, [], { id: 'new', babyId: 'baby-1', startDate: '2026-08-15' }), /delete failed/);
+  assert.deepEqual((await repository.list('weeklyMenus', { babyId: 'baby-1' })).map(menu => menu.id).sort(), old.map(menu => menu.id).sort());
 });

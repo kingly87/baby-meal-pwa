@@ -11,21 +11,23 @@ function repositoryWithMenus(weeklyMenus) {
   });
 }
 
-test('AppStore keeps all baby menus sorted but selects the menu containing today', async () => {
+test('AppStore keeps all baby menus sorted but selects only an exact today menu', async () => {
   const store = new AppStore(repositoryWithMenus([
-    { id: 'current', babyId: 'baby-1', startDate: '2026-08-10' },
+    { id: 'same-week', babyId: 'baby-1', startDate: '2026-08-10' },
+    { id: 'current', babyId: 'baby-1', startDate: '2026-08-15' },
     { id: 'future', babyId: 'baby-1', startDate: '2026-08-17' },
     { id: 'history', babyId: 'baby-1', startDate: '2026-08-03' }
   ]), { now: () => new Date(2026, 7, 15, 12) });
 
   await store.load();
 
-  assert.deepEqual(store.weeks.map(menu => menu.id), ['future', 'current', 'history']);
+  assert.deepEqual(store.weeks.map(menu => menu.id), ['future', 'current', 'same-week', 'history']);
   assert.equal(store.week.id, 'current');
 });
 
-test('AppStore uses null when the active baby has no menu for the current week', async () => {
+test('AppStore uses null when the active baby has no menu for today', async () => {
   const store = new AppStore(repositoryWithMenus([
+    { id: 'same-week', babyId: 'baby-1', startDate: '2026-08-10' },
     { id: 'future', babyId: 'baby-1', startDate: '2026-08-17' },
     { id: 'history', babyId: 'baby-1', startDate: '2026-08-03' }
   ]), { now: () => new Date(2026, 7, 15, 12) });
@@ -35,10 +37,10 @@ test('AppStore uses null when the active baby has no menu for the current week',
   assert.equal(store.week, null);
 });
 
-test('AppStore isolates the current week after switching babies', async () => {
+test('AppStore isolates the exact current date after switching babies', async () => {
   const store = new AppStore(repositoryWithMenus([
-    { id: 'baby-1-current', babyId: 'baby-1', startDate: '2026-08-10' },
-    { id: 'baby-2-current', babyId: 'baby-2', startDate: '2026-08-10' },
+    { id: 'baby-1-current', babyId: 'baby-1', startDate: '2026-08-15' },
+    { id: 'baby-2-current', babyId: 'baby-2', startDate: '2026-08-15' },
     { id: 'baby-2-future', babyId: 'baby-2', startDate: '2026-08-17' }
   ]), { now: () => new Date(2026, 7, 15, 12) });
 

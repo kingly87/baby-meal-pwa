@@ -68,14 +68,15 @@ export function normalizeMenu(menu) {
   };
 }
 
-export function findMenuForWeek(menus, { babyId, date } = {}) {
+export function findMenuForDate(menus, { babyId, date } = {}) {
   if (!Array.isArray(menus)) return null;
-  const targetWeek = weekStart(date);
+  parseLocalDate(date);
   const menu = menus.find(candidate => {
     if (!candidate || candidate.babyId !== babyId) return false;
     const menuDate = candidate.startDate ?? candidate.days?.[0]?.date;
     try {
-      return weekStart(menuDate) === targetWeek;
+      parseLocalDate(menuDate);
+      return menuDate === date;
     } catch {
       return false;
     }
@@ -91,37 +92,50 @@ function stableMenuOrder(left, right) {
   return String(left.id ?? '').localeCompare(String(right.id ?? ''));
 }
 
-export async function saveCurrentWeek(repository, _menus, generated, nowISO) {
+export async function saveCurrentMenu(repository, _menus, generated, nowISO) {
   if (typeof generated?.babyId !== 'string' || !generated.babyId.trim()) {
     throw new Error('generated.babyId must be a non-empty string');
   }
   try {
-    weekStart(generated.startDate);
+    parseLocalDate(generated.startDate);
   } catch {
     throw new Error('generated.startDate must be a valid local date');
   }
 
   const timestamp = nowISO ?? new Date().toISOString();
-  const targetWeek = weekStart(generated.startDate);
   return repository.transaction(['weeklyMenus'], async tx => {
     const currentMenus = await tx.list('weeklyMenus', { babyId: generated.babyId });
-    const sameWeek = currentMenus.filter(menu => {
+    const sameDate = currentMenus.filter(menu => {
       try {
-        return weekStart(menu.startDate ?? menu.days?.[0]?.date) === targetWeek;
+        const menuDate = menu.startDate ?? menu.days?.[0]?.date;
+        parseLocalDate(menuDate);
+        return menuDate === generated.startDate;
       } catch {
         return false;
       }
     }).sort(stableMenuOrder);
-    const keeper = sameWeek[0];
+    const keeper = sameDate[0];
     const value = structuredClone(generated);
     value.id = keeper?.id ?? value.id;
     value.createdAt = keeper?.createdAt ?? value.createdAt ?? timestamp;
     value.updatedAt = timestamp;
 
     const saved = await tx.put('weeklyMenus', value);
-    for (const duplicate of sameWeek.slice(1)) {
+    for (const duplicate of sameDate.slice(1)) {
       await tx.delete('weeklyMenus', duplicate.id);
     }
+    const retained = currentMenus
+      .filter(menu => !sameDate.some(candidate => candidate.id === menu.id))
+      .concat(saved)
+      .sort((left, right) => {
+        const byDate = String(right.startDate ?? '').localeCompare(String(left.startDate ?? ''));
+        if (byDate) return byDate;
+        const leftUpdated = String(left.updatedAt ?? left.createdAt ?? '');
+        const rightUpdated = String(right.updatedAt ?? right.createdAt ?? '');
+        const byTimestamp = rightUpdated.localeCompare(leftUpdated);
+        return byTimestamp || String(right.id ?? '').localeCompare(String(left.id ?? ''));
+      });
+    for (const stale of retained.slice(6)) await tx.delete('weeklyMenus', stale.id);
     return saved;
   });
 }

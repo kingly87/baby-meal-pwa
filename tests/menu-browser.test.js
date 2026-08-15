@@ -22,14 +22,15 @@ test('menu browser falls back to current when selected history no longer exists'
   assert.deepEqual(browser.value(),{mode:'current',selectedId:null,editingHistory:false});
 });
 
-test('history excludes every duplicate record from the current natural week',()=>{
+test('history excludes only the exact current date and keeps earlier same-week menus',()=>{
   const menus=[
     {id:'current',babyId:'b1',startDate:'2026-08-10'},
     {id:'duplicate',babyId:'b1',startDate:'2026-08-12'},
     {id:'old',babyId:'b1',startDate:'2026-08-03'},
+    {id:'invalid',babyId:'b1',startDate:'2026-02-30'},
     {id:'other-baby',babyId:'b2',startDate:'2026-08-12'}
   ];
-  assert.deepEqual(historyMenus(menus,{babyId:'b1',date:'2026-08-15'}).map(menu=>menu.id),['old']);
+  assert.deepEqual(historyMenus(menus,{babyId:'b1',date:'2026-08-15'}).map(menu=>menu.id),['duplicate','current','old']);
 });
 
 const menu=()=>({id:'w1',babyId:'b1',startDate:'2026-08-03',days:[{date:'2026-08-03',meals:[{id:'m1',status:'planned'},{id:'m2',status:'planned'}]}]});

@@ -1,9 +1,9 @@
-import{weekStart}from'./week-menu.js';
+import{findMenuForDate}from'./week-menu.js';
 import{replaceMeal}from'./planner.js';
 
 export function historyMenus(menus,{babyId,date}={}){
-  let currentWeek;try{currentWeek=weekStart(date)}catch{return[]}
-  return menus.filter(menu=>{if(menu?.babyId!==babyId)return false;try{return weekStart(menu.startDate??menu.days?.[0]?.date)!==currentWeek}catch{return false}}).sort((a,b)=>String(b.startDate||'').localeCompare(String(a.startDate||'')));
+  try{findMenuForDate([],{babyId,date})}catch{return[]}
+  return menus.filter(menu=>{if(menu?.babyId!==babyId||menu.startDate===date)return false;try{return Boolean(findMenuForDate([menu],{babyId,date:menu.startDate}))}catch{return false}}).sort((a,b)=>String(b.startDate||'').localeCompare(String(a.startDate||'')));
 }
 
 const repositoryQueues=new WeakMap();
