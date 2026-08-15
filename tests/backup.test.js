@@ -47,6 +47,14 @@ test('backup rejects malformed nested menus and task dates', () => {
   assert.throws(()=>previewBackup(JSON.stringify({...base,data:{...base.data,taskInstances:[{id:'t1',babyId:'b1',date:'bad',plannedAt:'bad'}]}})),/taskInstances/);
 });
 
+test('backup reports malformed menu entries as weeklyMenus validation errors', () => {
+  const base={app:'baby-growth-assistant',schemaVersion:1,data:{babies:[{id:'b1',name:'Baby',stage:'stage4'}]}};
+  for(const days of [[null],[{date:'2026-08-15',meals:[null]}]]) {
+    const weeklyMenus=[{id:'w1',babyId:'b1',days}];
+    assert.throws(()=>previewBackup(JSON.stringify({...base,data:{...base.data,weeklyMenus}})),/weeklyMenus/);
+  }
+});
+
 test('backup accepts legacy meals without mealType and all supported meal types', () => {
   const base={app:'baby-growth-assistant',schemaVersion:1,data:{babies:[{id:'b1',name:'Baby',stage:'stage4'}]}};
   const meals=[

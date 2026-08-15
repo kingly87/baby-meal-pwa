@@ -10,7 +10,7 @@ const APP_SHELL=[
 ];
 
 self.addEventListener('install',event=>event.waitUntil(caches.open(CACHE_NAME).then(cache=>cache.addAll(APP_SHELL))));
-self.addEventListener('activate',event=>event.waitUntil(caches.keys().then(keys=>Promise.all(keys.filter(key=>key!==CACHE_NAME).map(key=>caches.delete(key)))).then(()=>self.clients.claim())));
+self.addEventListener('activate',event=>event.waitUntil(caches.keys().then(keys=>Promise.all(keys.filter(key=>key.startsWith('baby-growth-v1-')&&key!==CACHE_NAME).map(key=>caches.delete(key)))).then(()=>self.clients.claim())));
 self.addEventListener('message',event=>{if(event.data?.type==='SKIP_WAITING')self.skipWaiting();if(event.data?.type==='SCHEDULE_NOTIFICATION')event.waitUntil(self.registration.showNotification(event.data.title,{body:'打开应用查看当前事项',tag:`task-${event.data.taskId}`,data:{url:'./',taskId:event.data.taskId}}))});
 
 async function navigationResponse(request){try{const response=await fetch(request);if(response.ok){const cache=await caches.open(CACHE_NAME);cache.put('./index.html',response.clone())}return response}catch{return caches.match('./index.html')}}

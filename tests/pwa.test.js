@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile, access, readdir } from 'node:fs/promises';
+import vm from 'node:vm';
 
 async function javascriptFiles(directory) {
   const entries=await readdir(directory,{withFileTypes:true});
@@ -24,6 +25,25 @@ test('service worker has safe caching, navigation fallback and controlled update
   const appFiles=['./','./index.html','./assets/styles/app.css','./data/recipes.js','./data/stage4-recipes-v2.js','./data/stage4-recipes-v2-rows.js','./src/app.js','./src/features/meals/recipe-details.js','./src/features/migration/v2.js','./src/ui/daily-trends.js','./manifest.webmanifest'];
   for(const file of appFiles) assert.ok(sw.includes(JSON.stringify(file)),file);
   for(const file of await javascriptFiles('src')) assert.ok(sw.includes(JSON.stringify(`./${file}`)),`missing offline cache entry: ${file}`);
+});
+
+test('service worker activation deletes only obsolete caches owned by this application', async () => {
+  const listeners={};
+  const deleted=[];
+  const self={
+    addEventListener(type,listener){listeners[type]=listener},
+    clients:{claim:async()=>{}},
+    location:{origin:'https://example.test'}
+  };
+  const caches={
+    keys:async()=>['baby-growth-v1-20260720-r26','baby-growth-v1-20260720-r27','other-app-cache'],
+    delete:async key=>{deleted.push(key); return true}
+  };
+  vm.runInNewContext(await readFile('service-worker.js','utf8'),{self,caches,URL});
+  let activation;
+  listeners.activate({waitUntil(promise){activation=promise}});
+  await activation;
+  assert.deepEqual(deleted,['baby-growth-v1-20260720-r26']);
 });
 
 test('application asks before activating a waiting service worker update', async () => {
