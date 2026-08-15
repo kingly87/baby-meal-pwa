@@ -254,6 +254,25 @@ test('findMenuForDate returns null for missing arrays and rejects invalid target
   assert.throws(() => findMenuForDate([], { babyId: 'baby-1', date: '2026-02-30' }), /菜单日期无效|鑿滃崟鏃ユ湡鏃犳晥/);
 });
 
+test('findMenuForDate never treats a day date as the explicit menu identity', () => {
+  const menus = [
+    { id: 'missing', babyId: 'baby-1', days: [{ date: '2026-08-15', meals: [] }] },
+    { id: 'invalid', babyId: 'baby-1', startDate: '2026-02-30', days: [{ date: '2026-08-15', meals: [] }] }
+  ];
+  assert.equal(findMenuForDate(menus, { babyId: 'baby-1', date: '2026-08-15' }), null);
+});
+
+test('saveCurrentMenu never uses a day date to choose the stable keeper', async () => {
+  const repository = new TrackingMemoryRepository({ weeklyMenus: [
+    { id: 'legacy', babyId: 'baby-1', createdAt: 'old', days: [{ date: '2026-08-15', meals: [] }] },
+    { id: 'invalid', babyId: 'baby-1', startDate: '2026-02-30', createdAt: 'older', days: [{ date: '2026-08-15', meals: [] }] }
+  ] });
+  const saved = await saveCurrentMenu(repository, [], { id: 'generated', babyId: 'baby-1', startDate: '2026-08-15' }, '2026-08-15T00:00:00.000Z');
+  assert.equal(saved.id, 'generated');
+  assert.ok(await repository.get('weeklyMenus', 'legacy'));
+  assert.ok(await repository.get('weeklyMenus', 'invalid'));
+});
+
 test('saveCurrentMenu keeps only the six newest exact-date menus for one baby', async () => {
   const old = Array.from({ length: 6 }, (_, index) => ({ id: `m${index + 1}`, babyId: 'baby-1', startDate: `2026-08-0${index + 1}`, updatedAt: `2026-08-0${index + 1}T00:00:00.000Z` }));
   const repository = new TrackingMemoryRepository({ weeklyMenus: [...old, { id: 'other', babyId: 'baby-2', startDate: '2026-01-01' }] });

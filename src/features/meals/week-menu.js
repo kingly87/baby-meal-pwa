@@ -73,7 +73,7 @@ export function findMenuForDate(menus, { babyId, date } = {}) {
   parseLocalDate(date);
   const menu = menus.find(candidate => {
     if (!candidate || candidate.babyId !== babyId) return false;
-    const menuDate = candidate.startDate ?? candidate.days?.[0]?.date;
+    const menuDate = candidate.startDate;
     try {
       parseLocalDate(menuDate);
       return menuDate === date;
@@ -107,7 +107,7 @@ export async function saveCurrentMenu(repository, _menus, generated, nowISO) {
     const currentMenus = await tx.list('weeklyMenus', { babyId: generated.babyId });
     const sameDate = currentMenus.filter(menu => {
       try {
-        const menuDate = menu.startDate ?? menu.days?.[0]?.date;
+        const menuDate = menu.startDate;
         parseLocalDate(menuDate);
         return menuDate === generated.startDate;
       } catch {
