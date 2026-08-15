@@ -51,6 +51,24 @@ test('uses a responsive seven-day viewBox and scrollable 44px slots for longer r
   }
 });
 
+test('constrains adjacent long value labels to their slots without abbreviating values',()=>{
+  const html=dailyTrendChart({...model,metric:'milk',points:[
+    {date:'2026-08-01',value:12345.67,hasData:true},
+    {date:'2026-08-02',value:98765.43,hasData:true}
+  ]});
+  const labels=[...html.matchAll(/<text class="trend-value"([^>]*)>([^<]+)<\/text>/g)];
+  assert.equal(labels.length,2);
+  assert.deepEqual(labels.map(match=>match[2]),['12345.67','98765.43']);
+  for(const [,attributes] of labels){
+    assert.match(attributes,/textLength="36"/);
+    assert.match(attributes,/lengthAdjust="spacingAndGlyphs"/);
+  }
+  assert.match(html,/<title>8月1日，12345\.67 ml<\/title>/);
+  assert.match(html,/aria-label="8月2日，98765\.43 ml"/);
+  const short=dailyTrendChart(model).match(/<text class="trend-value"([^>]*)>11\.3<\/text>/)?.[1]||'';
+  assert.doesNotMatch(short,/textLength|lengthAdjust/);
+});
+
 test('keeps metric units in chart accessibility and summaries',()=>{
   for(const [metric,label,unit] of [['sleep','睡眠','小时'],['milk','奶量','ml'],['stool','便便','次'],['urine','尿尿','次']]){
     const html=dailyTrendChart({...model,metric});
@@ -88,4 +106,6 @@ test('styles readable value labels, seven-day fitting and explicit horizontal sc
   assert.match(css,/\.trend-bar:focus[^}]*\.trend-hit-target\{[^}]*stroke:/s);
   assert.match(css,/\.trend-metrics\{grid-template-columns:repeat\(2,minmax\(0,1fr\)\)/);
   assert.ok(css.includes('.visually-hidden'));
+  assert.equal((css.match(/\.trend-chart\{/g)||[]).length,2);
+  assert.doesNotMatch(css,/--trend-count|grid-template-rows:1fr 22px|\.trend-date-placeholder/);
 });
