@@ -29,7 +29,7 @@ test('editing, moving, changing type and deleting sleep restores then replays an
   const edited={...first,type:'nap',startAt:'2026-07-20T08:30:00.000Z',endAt:'2026-07-20T09:30:00.000Z'};
   await replaySleepScheduleAtomically(repo,{nextSession:edited,previousSession:first});
   assert.equal((await repo.get('taskInstances','wake20')).plannedAt,'2026-07-20T08:00:00.000Z');
-  assert.equal((await repo.get('taskInstances','meal20')).plannedAt,'2026-07-20T10:30:00.000Z');
+  assert.equal((await repo.get('taskInstances','meal20')).plannedAt,'2026-07-20T10:00:00.000Z');
 
   const moved=night('s1','2026-07-21T07:00:00.000Z');
   await replaySleepScheduleAtomically(repo,{nextSession:moved,previousSession:edited});
@@ -52,6 +52,33 @@ test('sleep and task writes roll back together when replay fails', async () => {
   await assert.rejects(replaySleepScheduleAtomically(repo,{nextSession:night('s1','2026-07-20T07:00:00.000Z')}),/task write failed/);
   assert.equal(await repo.get('sleepSessions','s1'),undefined);
   assert.equal((await repo.get('taskInstances','meal20')).plannedAt,'2026-07-20T10:00:00.000Z');
+});
+
+test('adding, editing, moving and deleting a nap preserves all scheduled tasks', async () => {
+  const repo=new MemoryRepository(seed());
+  const legacyAnchored=baseTask('after-nap','2026-07-20','meal','2026-07-20T15:00:00.000Z',300);
+  legacyAnchored.sleepAnchorBaseline={plannedAt:'2026-07-20T14:30:00.000Z',status:'upcoming',actualAt:null,updatedAt:'2026-07-20T00:00:00.000Z'};
+  await repo.put('taskInstances',legacyAnchored);
+  await repo.put('taskInstances',baseTask('after-moved-nap','2026-07-21','meal','2026-07-21T15:00:00.000Z',300));
+  const expected=structuredClone(await repo.list('taskInstances',{babyId:'b1'}));
+  const first={id:'nap-1',babyId:'b1',type:'nap',startAt:'2026-07-20T13:00:00.000Z',endAt:'2026-07-20T14:00:00.000Z',durationMinutes:60};
+
+  await replaySleepScheduleAtomically(repo,{nextSession:first});
+  assert.deepEqual(await repo.list('taskInstances',{babyId:'b1'}),expected);
+  assert.deepEqual(await repo.get('sleepSessions','nap-1'),first);
+
+  const edited={...first,startAt:'2026-07-20T12:30:00.000Z',endAt:'2026-07-20T14:30:00.000Z',durationMinutes:120};
+  await replaySleepScheduleAtomically(repo,{nextSession:edited,previousSession:first});
+  assert.deepEqual(await repo.list('taskInstances',{babyId:'b1'}),expected);
+  assert.deepEqual(await repo.get('sleepSessions','nap-1'),edited);
+
+  const moved={...edited,startAt:'2026-07-21T12:30:00.000Z',endAt:'2026-07-21T14:30:00.000Z'};
+  await replaySleepScheduleAtomically(repo,{nextSession:moved,previousSession:edited});
+  assert.deepEqual(await repo.list('taskInstances',{babyId:'b1'}),expected);
+
+  await replaySleepScheduleAtomically(repo,{previousSession:moved,deleteId:moved.id});
+  assert.deepEqual(await repo.list('taskInstances',{babyId:'b1'}),expected);
+  assert.equal(await repo.get('sleepSessions','nap-1'),undefined);
 });
 
 test('manual locks survive atomic sleep editing and deletion after a real cascade', async () => {

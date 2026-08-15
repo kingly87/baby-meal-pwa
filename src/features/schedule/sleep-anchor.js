@@ -3,7 +3,10 @@ import { addMinutes, localDateKey } from '../../core/dates.js';
 const LOCKED_STATUSES = new Set(['completed', 'skipped', 'adjusted']);
 
 function copyTasks(tasks) {
-  return tasks.map(task => ({ ...task }));
+  return tasks.map(task => ({
+    ...task,
+    ...(task.sleepAnchorBaseline ? { sleepAnchorBaseline: { ...task.sleepAnchorBaseline } } : {})
+  }));
 }
 
 function anchored(task,changes){
@@ -56,52 +59,24 @@ function cascade(tasks, entries, startIndex, base, anchorAt) {
   }
 }
 
-export function applySleepAnchor(tasks, sleep, { napToMealMinutes = 120 } = {}) {
+export function applySleepAnchor(tasks, sleep) {
   const result = copyTasks(tasks);
   if (!sleep?.babyId || !sleep.endAt || !['night', 'nap'].includes(sleep.type)) return result;
-  if (!Number.isFinite(napToMealMinutes) || napToMealMinutes < 0) return result;
+  if (sleep.type === 'nap') return result;
   const endTime = new Date(sleep.endAt).getTime();
   if (!Number.isFinite(endTime)) return result;
-  if (sleep.type === 'nap' && sleep.startAt && !Number.isFinite(new Date(sleep.startAt).getTime())) return result;
   const date = sleep.date || localDateKey(new Date(sleep.endAt));
   const entries = scopedEntries(result, sleep.babyId, date);
 
-  if (sleep.type === 'night') {
-    const wakePosition = entries.findIndex(entry => entry.task.type === 'wake');
-    if (wakePosition < 0) return result;
-    const wakeIndex = entries[wakePosition].index;
-    if (['skipped', 'adjusted'].includes(result[wakeIndex].status)) return result;
-    result[wakeIndex] = anchored(result[wakeIndex],{
-      status: 'completed',
-      actualAt: sleep.endAt,
-      updatedAt: sleep.endAt
-    });
-    cascade(result, entries, wakePosition, sleep.endAt, sleep.endAt);
-    return result;
-  }
-
-  const sleepStart = sleep.startAt || sleep.endAt;
-  const startTime = new Date(sleepStart).getTime();
-  const mealEntry = entries
-    .filter(entry =>
-      entry.task.type === 'meal'
-      && !LOCKED_STATUSES.has(entry.task.status)
-      && new Date(entry.task.plannedAt).getTime() >= startTime
-    )
-    .reduce((earliest, entry) =>
-      !earliest || new Date(entry.task.plannedAt).getTime() < new Date(earliest.task.plannedAt).getTime()
-        ? entry
-        : earliest
-    , null);
-  if (!mealEntry) return result;
-
-  const plannedAt = addMinutes(sleep.endAt, napToMealMinutes);
-  const mealIndex = mealEntry.index;
-  result[mealIndex] = anchored(result[mealIndex],{
-    plannedAt,
-    status: 'upcoming',
+  const wakePosition = entries.findIndex(entry => entry.task.type === 'wake');
+  if (wakePosition < 0) return result;
+  const wakeIndex = entries[wakePosition].index;
+  if (['skipped', 'adjusted'].includes(result[wakeIndex].status)) return result;
+  result[wakeIndex] = anchored(result[wakeIndex],{
+    status: 'completed',
+    actualAt: sleep.endAt,
     updatedAt: sleep.endAt
   });
-  cascade(result, entries, entries.indexOf(mealEntry), plannedAt, sleep.endAt);
+  cascade(result, entries, wakePosition, sleep.endAt, sleep.endAt);
   return result;
 }

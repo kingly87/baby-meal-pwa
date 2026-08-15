@@ -9,6 +9,7 @@ import { growthView, chartSvg } from '../src/ui/growth.js';
 import { recordsView } from '../src/ui/records.js';
 import { formatDateTimeLocal } from '../src/app.js';
 import { openActionDialog, guardedDialogClose, runDialogSubmit } from '../src/ui/dialogs.js';
+import { createDefaultTemplate } from '../src/features/schedule/template.js';
 
 function fakeDialogDocument(){
   class Node extends EventTarget{
@@ -428,7 +429,13 @@ test('records screen manages food observations and reminders after creation', ()
 
 test('schedule editor supports enabling rules and adding a custom item', async () => {
   const app=await readFile('src/app.js','utf8');
-  for(const field of ['customTitle','customType','customAfter','enabled-','napToMealMinutes']) assert.ok(app.includes(field),field);
+  for(const field of ['customTitle','customType','customAfter','enabled-']) assert.ok(app.includes(field),field);
+  assert.doesNotMatch(app,/name="napToMealMinutes"/);
+  assert.doesNotMatch(app,/午睡结束后多久吃辅食（分钟）/);
+});
+
+test('new schedule templates omit the retired nap-to-meal setting', () => {
+  assert.equal(Object.hasOwn(createDefaultTemplate('baby-1'),'napToMealMinutes'),false);
 });
 
 test('sleep dialogs choose a type and completed flows share schedule recalculation', async () => {

@@ -56,24 +56,25 @@ test('sleep anchors restore original task fields and preserve the first baseline
   assert.deepEqual(restoreSleepAnchors(napped),napOriginal);
 });
 
-test('nap completion moves the next eligible meal by the configured interval', () => {
+test('nap completion leaves every task unchanged and returns a deep structural copy', () => {
   const tasks = [
     task('nap', 'sleep', '2026-07-20T13:00:00.000Z', 60),
     task('meal', 'meal', '2026-07-20T14:30:00.000Z', 90),
     task('milk', 'milk', '2026-07-20T16:30:00.000Z', 120)
   ];
 
+  const snapshot = structuredClone(tasks);
   const result = applySleepAnchor(tasks, {
     type: 'nap',
     babyId: 'baby-1',
     startAt: '2026-07-20T13:00:00.000Z',
     endAt: '2026-07-20T14:00:00.000Z'
-  });
+  }, { napToMealMinutes: 5 });
 
-  assert.equal(result[1].plannedAt, '2026-07-20T16:00:00.000Z');
-  assert.equal(result[1].status, 'upcoming');
-  assert.equal(result[1].updatedAt, '2026-07-20T14:00:00.000Z');
-  assert.equal(result[2].plannedAt, '2026-07-20T18:00:00.000Z');
+  assert.deepEqual(tasks, snapshot);
+  assert.deepEqual(result, tasks);
+  assert.notStrictEqual(result, tasks);
+  result.forEach((item,index)=>assert.notStrictEqual(item,tasks[index]));
 });
 
 test('completed, skipped and adjusted tasks stay locked and reset the cascade base', () => {
@@ -176,7 +177,7 @@ test('derives the local end date and strictly isolates another date', () => {
   assert.equal(result[2].plannedAt, '2026-07-20T07:20:00.000Z');
 });
 
-test('nap selects the earliest eligible meal even when tasks are unsorted', () => {
+test('nap ignores legacy interval configuration even when eligible meals exist', () => {
   const tasks = [
     task('later-meal', 'meal', '2026-07-20T17:00:00.000Z', 180),
     task('earlier-meal', 'meal', '2026-07-20T15:00:00.000Z', 120)
@@ -188,11 +189,9 @@ test('nap selects the earliest eligible meal even when tasks are unsorted', () =
     date: '2026-07-20',
     startAt: '2026-07-20T13:00:00.000Z',
     endAt: '2026-07-20T14:00:00.000Z'
-  });
+  }, { napToMealMinutes: 1 });
 
-  assert.equal(result[0].plannedAt, '2026-07-20T19:00:00.000Z');
-  assert.equal(result[1].id, 'earlier-meal');
-  assert.equal(result[1].plannedAt, '2026-07-20T16:00:00.000Z');
+  assert.deepEqual(result, tasks);
 });
 
 test('night cascades through logical rule order while preserving physical array order', () => {
@@ -234,7 +233,7 @@ test('night selects the logically earliest wake when several exist', () => {
   assert.notEqual(result[0].actualAt, '2026-07-20T07:00:00.000Z');
 });
 
-test('nap writes back by entry index when duplicate ids exist across scopes', () => {
+test('nap leaves duplicate ids across scopes unchanged', () => {
   const tasks = [
     task('duplicate', 'meal', '2026-07-20T15:00:00.000Z', 120, 'upcoming', { babyId: 'baby-2' }),
     task('duplicate', 'meal', '2026-07-20T15:30:00.000Z', 120)
@@ -248,11 +247,10 @@ test('nap writes back by entry index when duplicate ids exist across scopes', ()
     endAt: '2026-07-20T14:00:00.000Z'
   });
 
-  assert.deepEqual(result[0], tasks[0]);
-  assert.equal(result[1].plannedAt, '2026-07-20T16:00:00.000Z');
+  assert.deepEqual(result, tasks);
 });
 
-test('invalid sleep times and nap intervals return unchanged copies without throwing', () => {
+test('invalid sleep times and legacy nap intervals return unchanged copies without throwing', () => {
   const tasks = [task('meal', 'meal', '2026-07-20T15:00:00.000Z', 120)];
   const cases = [
     [{ type: 'night', babyId: 'baby-1', date: '2026-07-20', endAt: 'invalid' }, undefined],
