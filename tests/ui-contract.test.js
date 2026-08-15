@@ -465,6 +465,24 @@ test('settings page exposes a shrinkable mobile-safe content scope',async()=>{
   assert.doesNotMatch(await readFile('index.html','utf8'),/user-scalable\s*=\s*no|maximum-scale\s*=\s*1/i);
 });
 
+test('settings backup copy states the supported schema and compatible legacy fields',()=>{
+  const html=settingsView({baby:{id:'baby-1'},babies:[]});
+  assert.match(html,/仅支持宝宝成长助手 V1 备份；旧版菜单和作息字段会兼容导入。/);
+  assert.doesNotMatch(html,/V1 不支持旧版备份/);
+});
+
+test('current menu copy describes a rolling seven-day range while history stays history',async()=>{
+  const html=mealsView({week:null,weeks:[],menuBrowser:{mode:'current'}});
+  assert.match(html,/当前7天菜单/);
+  assert.match(html,/生成7天菜单/);
+  assert.match(html,/还没有当前7天菜单/);
+  assert.match(html,/历史菜单/);
+  assert.doesNotMatch(html,/本周菜单/);
+  const app=await readFile('src/app.js','utf8');
+  assert.match(app,/7天菜单已生成/);
+  assert.doesNotMatch(app,/本周菜单/);
+});
+
 test('complete timeline keeps its native filter and scrolls inside a touch region',async()=>{
   const html=growthView({timeline:Array.from({length:8},(_,index)=>({type:'sleep',date:`2026-07-${20-index}`,title:`睡眠记录 ${index}`}))});
   const css=await readFile('assets/styles/app.css','utf8');

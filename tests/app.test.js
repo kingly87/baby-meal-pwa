@@ -49,7 +49,7 @@ test('current menu generation uses the requested local date, creates 21 meals, c
   let calls=0,confirmations=0,release;
   const pending=new Promise(resolve=>{release=resolve});
   const generated={id:'new',babyId:'b1',startDate:'2026-08-15',days:Array.from({length:7},(_,index)=>({date:`2026-08-${15+index}`,meals:[{},{},{}]}))};
-  const options={repository:{},weeks:[{id:'current'}],current:{id:'current',startDate:'2026-08-15'},baby:{id:'b1',stage:'stage4'},recipes:[],date:'2026-08-15',confirm:()=>{confirmations++;return true},generate:(catalog,input)=>{calls++;assert.equal(input.startDate,'2026-08-15');assert.equal(Object.hasOwn(input,'mealCount'),false);return generated},save:async()=>{await pending}};
+  const options={repository:{},weeks:[{id:'current'}],current:{id:'current',startDate:'2026-08-15'},baby:{id:'b1',stage:'stage4'},recipes:[],date:'2026-08-15',confirm:message=>{confirmations++;assert.match(message,/当前7天菜单已存在，继续将覆盖当前7天菜单/);return true},generate:(catalog,input)=>{calls++;assert.equal(input.startDate,'2026-08-15');assert.equal(Object.hasOwn(input,'mealCount'),false);return generated},save:async()=>{await pending}};
   const first=generateCurrentMenu(options),second=generateCurrentMenu(options);
   assert.strictEqual(first,second);
   assert.equal(calls,1);
