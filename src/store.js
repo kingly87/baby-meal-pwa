@@ -1,5 +1,5 @@
 import { localDateKey } from './core/dates.js';
-import { findMenuForDate } from './features/meals/week-menu.js';
+import { findMenuForDate, hasValidMenuStartDate } from './features/meals/week-menu.js';
 
 export class AppStore {
   constructor(repository,{now=()=>new Date()}={}) {
@@ -16,7 +16,7 @@ export class AppStore {
       this.allTasks=await this.repo.list('taskInstances',{babyId:this.activeBabyId});
       this.tasks=this.allTasks.filter(task=>task.date===today)
         .sort((a,b)=>a.plannedAt.localeCompare(b.plannedAt));
-      this.weeks=(await this.repo.list('weeklyMenus',{babyId:this.activeBabyId})).sort((a,b)=>b.startDate.localeCompare(a.startDate));
+      this.weeks=(await this.repo.list('weeklyMenus',{babyId:this.activeBabyId})).filter(hasValidMenuStartDate).sort((a,b)=>b.startDate.localeCompare(a.startDate));
       this.week=findMenuForDate(this.weeks,{babyId:this.activeBabyId,date:today});
     }
     return this;

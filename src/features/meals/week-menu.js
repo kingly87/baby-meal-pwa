@@ -39,6 +39,15 @@ export function weekRange(value) {
   return { startDate, endDate: addLocalDays(startDate, 6) };
 }
 
+export function hasValidMenuStartDate(menu) {
+  try {
+    parseLocalDate(menu?.startDate);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 function cloneMeal(meal, fallbackType) {
   if (!meal || typeof meal !== 'object' || Array.isArray(meal)) return meal;
   const cloned = { ...meal };
@@ -92,6 +101,8 @@ function stableMenuOrder(left, right) {
   return String(left.id ?? '').localeCompare(String(right.id ?? ''));
 }
 
+const saveQueues = new WeakMap();
+
 export async function saveCurrentMenu(repository, _menus, generated, nowISO) {
   if (typeof generated?.babyId !== 'string' || !generated.babyId.trim()) {
     throw new Error('generated.babyId must be a non-empty string');
@@ -103,7 +114,8 @@ export async function saveCurrentMenu(repository, _menus, generated, nowISO) {
   }
 
   const timestamp = nowISO ?? new Date().toISOString();
-  return repository.transaction(['weeklyMenus'], async tx => {
+  const previous = saveQueues.get(repository) ?? Promise.resolve();
+  const operation = previous.catch(() => {}).then(() => repository.transaction(['weeklyMenus'], async tx => {
     const currentMenus = await tx.list('weeklyMenus', { babyId: generated.babyId });
     const sameDate = currentMenus.filter(menu => {
       try {
@@ -125,6 +137,7 @@ export async function saveCurrentMenu(repository, _menus, generated, nowISO) {
       await tx.delete('weeklyMenus', duplicate.id);
     }
     const retained = currentMenus
+      .filter(hasValidMenuStartDate)
       .filter(menu => !sameDate.some(candidate => candidate.id === menu.id))
       .concat(saved)
       .sort((left, right) => {
@@ -137,5 +150,10 @@ export async function saveCurrentMenu(repository, _menus, generated, nowISO) {
       });
     for (const stale of retained.slice(6)) await tx.delete('weeklyMenus', stale.id);
     return saved;
-  });
+  }));
+  saveQueues.set(repository, operation);
+  operation.finally(() => {
+    if (saveQueues.get(repository) === operation) saveQueues.delete(repository);
+  }).catch(() => {});
+  return operation;
 }

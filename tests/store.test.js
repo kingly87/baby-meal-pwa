@@ -50,3 +50,14 @@ test('AppStore isolates the exact current date after switching babies', async ()
   assert.deepEqual(store.weeks.map(menu => menu.id), ['baby-2-future', 'baby-2-current']);
   assert.equal(store.week.id, 'baby-2-current');
 });
+
+test('AppStore ignores damaged menu dates without crashing and still selects today', async () => {
+  const store = new AppStore(repositoryWithMenus([
+    { id: 'missing', babyId: 'baby-1' },
+    { id: 'invalid', babyId: 'baby-1', startDate: 'zzzz' },
+    { id: 'today', babyId: 'baby-1', startDate: '2026-08-15' }
+  ]), { now: () => new Date(2026, 7, 15, 12) });
+  await store.load();
+  assert.deepEqual(store.weeks.map(menu => menu.id), ['today']);
+  assert.equal(store.week.id, 'today');
+});
