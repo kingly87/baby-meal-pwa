@@ -470,6 +470,8 @@ test('complete timeline keeps its native filter and scrolls inside a touch regio
   const css=await readFile('assets/styles/app.css','utf8');
   assert.match(html,/<select id="timeline-filter">[\s\S]*<option value="water">/);
   assert.match(html,/class="timeline timeline-scroll"/);
+  assert.match(html,/<h2 id="complete-timeline-title">完整时间线<\/h2>/);
+  assert.match(html,/class="timeline timeline-scroll" tabindex="0" role="region" aria-labelledby="complete-timeline-title"/);
   assert.match(css,/#timeline-filter\{[^}]*min-height:44px[^}]*max-width:100%[^}]*min-width:0[^}]*touch-action:manipulation[^}]*\}/);
   assert.match(css,/\.timeline-scroll\{[^}]*max-height:[^;}]+[^}]*overflow-y:auto[^}]*overflow-x:hidden[^}]*-webkit-overflow-scrolling:touch[^}]*overscroll-behavior:contain[^}]*\}/);
 });

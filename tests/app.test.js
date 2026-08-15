@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { MemoryRepository } from '../src/db.js';
-import { loadApplicationModel, bindOnboardingActions, bindRecipeSearchInput, ensureDailySchedule, recalculateScheduleForSleep, loadDailyTrend, createTrendState, loadRenderData, runRefreshCycle, createRefreshCoordinator, createAsyncEpoch, runNotificationSchedule, runDataReplacement, changeNotificationScheduling, lockApplicationAfterCommittedReplacement, syncNotifiedTasks, generateCurrentMenu, confirmHistoryEdit, runMenuGeneration, runMenuGenerationClick, growthViewProps } from '../src/app.js';
+import { loadApplicationModel, bindOnboardingActions, bindRecipeSearchInput, bindTimelineFilter, ensureDailySchedule, recalculateScheduleForSleep, loadDailyTrend, createTrendState, loadRenderData, runRefreshCycle, createRefreshCoordinator, createAsyncEpoch, runNotificationSchedule, runDataReplacement, changeNotificationScheduling, lockApplicationAfterCommittedReplacement, syncNotifiedTasks, generateCurrentMenu, confirmHistoryEdit, runMenuGeneration, runMenuGenerationClick, growthViewProps } from '../src/app.js';
 
 test('growth view props use already loaded data and isolate the active baby',()=>{
   const allData={growthMeasurements:[{id:'a',babyId:'b1'},{id:'b',babyId:'b2'}],toothRecords:[{id:'t1',babyId:'b1'},{id:'t2',babyId:'b2'}]};
@@ -58,6 +58,20 @@ test('current menu generation uses the requested local date, creates 21 meals, c
   assert.strictEqual(await first,generated);
   assert.equal(generated.days.flatMap(day=>day.meals).length,21);
   assert.deepEqual(generated.days.map(day=>day.date),['2026-08-15','2026-08-16','2026-08-17','2026-08-18','2026-08-19','2026-08-20','2026-08-21']);
+});
+
+test('timeline filter hides nonmatching records and resets its scroll position',()=>{
+  let change;
+  const select={value:'sleep',addEventListener(type,handler){if(type==='change')change=handler}};
+  const articles=[{dataset:{type:'sleep'},hidden:true},{dataset:{type:'milk'},hidden:false},{dataset:{type:'sleep'},hidden:true}];
+  const timeline={scrollTop:180,querySelectorAll(selector){assert.equal(selector,'article');return articles}};
+  bindTimelineFilter(select,timeline);
+  change();
+  assert.deepEqual(articles.map(item=>item.hidden),[false,true,false]);
+  assert.equal(timeline.scrollTop,0);
+  select.value='all';timeline.scrollTop=90;change();
+  assert.deepEqual(articles.map(item=>item.hidden),[false,false,false]);
+  assert.equal(timeline.scrollTop,0);
 });
 
 test('menu generation treats an earlier menu as history and does not confirm overwrite',async()=>{
