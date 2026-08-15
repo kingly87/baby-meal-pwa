@@ -1,5 +1,3 @@
-const VALID_MEAL_TYPES = new Set(['breakfast', 'lunch', 'dinner']);
-
 function parseLocalDate(value) {
   if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) {
     throw new Error('菜单日期无效');
@@ -44,10 +42,7 @@ export function weekRange(value) {
 function cloneMeal(meal, fallbackType) {
   if (!meal || typeof meal !== 'object' || Array.isArray(meal)) return meal;
   const cloned = { ...meal };
-  if (!VALID_MEAL_TYPES.has(cloned.mealType)) {
-    delete cloned.mealType;
-    if (fallbackType) cloned.mealType = fallbackType;
-  }
+  if (cloned.mealType == null && fallbackType) cloned.mealType = fallbackType;
   return cloned;
 }
 

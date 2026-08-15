@@ -72,6 +72,20 @@ test('normalizeMenu preserves existing valid meal types', () => {
   assert.deepEqual(normalized.days[0].meals.map(meal => meal.mealType), ['breakfast', 'dinner']);
 });
 
+test('normalizeMenu preserves explicit unknown meal types and only fills missing legacy values', () => {
+  const normalized = normalizeMenu({
+    days: [{ meals: [
+      { id: 'a', mealType: 'snack' },
+      { id: 'b', mealType: null },
+      { id: 'c' }
+    ] }]
+  });
+  assert.deepEqual(
+    normalized.days[0].meals.map(meal => meal.mealType),
+    ['snack', 'lunch', 'dinner']
+  );
+});
+
 test('normalizeMenu safely clones abnormal days without inventing meal types', () => {
   const menu = {
     days: [
