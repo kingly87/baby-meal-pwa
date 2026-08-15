@@ -186,6 +186,13 @@ test('menu tabs render sorted history ranges and normalize three meal labels',()
   assert.deepEqual(current.days[0].meals.map(meal=>meal.mealType),[undefined,undefined,undefined]);
 });
 
+test('menu view excludes duplicate records belonging to the current natural week',()=>{
+  const current={id:'current',babyId:'b1',startDate:'2026-08-10',days:[]},duplicate={id:'duplicate',babyId:'b1',startDate:'2026-08-13',days:[]},old={id:'old',babyId:'b1',startDate:'2026-08-03',days:[]};
+  const html=mealsView({week:current,weeks:[current,duplicate,old],menuBrowser:{mode:'current'}});
+  assert.doesNotMatch(html,/data-id="duplicate"/);
+  assert.match(html,/data-id="old"/);
+});
+
 test('history is read only until explicitly editing the selected week',()=>{
   const old={id:'old',startDate:'2026-08-03',days:[{date:'2026-08-03',meals:[{id:'m',name:'午饭'},{id:'d',name:'晚饭'}]}]};
   const readonly=mealsView({week:null,weeks:[old],menuBrowser:{mode:'history',selectedId:'old',editingHistory:false}});
@@ -296,7 +303,6 @@ test('application resets menu browsing on identity and replacement boundaries',a
   assert.match(remove,/menuBrowser\.reset\(\)/);
   const imported=app.match(/async function importData\(event\)\{[^\n]+/)?.[0]||'';
   assert.match(imported,/menuBrowser\.reset\(\)/);
-  assert.match(app,/confirm\('正在修改过去的饮食记录，是否继续？'\)/);
 });
 
 test('malformed legacy recipe arrays never throw or inject markup', () => {

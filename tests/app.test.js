@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { MemoryRepository } from '../src/db.js';
-import { loadApplicationModel, bindOnboardingActions, bindRecipeSearchInput, ensureDailySchedule, recalculateScheduleForSleep, loadDailyTrend, createTrendState, loadRenderData, runRefreshCycle, createRefreshCoordinator, createAsyncEpoch, runNotificationSchedule, runDataReplacement, changeNotificationScheduling, lockApplicationAfterCommittedReplacement, syncNotifiedTasks, updateTargetMenu, generateCurrentMenu } from '../src/app.js';
+import { loadApplicationModel, bindOnboardingActions, bindRecipeSearchInput, ensureDailySchedule, recalculateScheduleForSleep, loadDailyTrend, createTrendState, loadRenderData, runRefreshCycle, createRefreshCoordinator, createAsyncEpoch, runNotificationSchedule, runDataReplacement, changeNotificationScheduling, lockApplicationAfterCommittedReplacement, syncNotifiedTasks, updateTargetMenu, generateCurrentMenu, confirmHistoryEdit, runMenuGeneration } from '../src/app.js';
 
 test('recipe search waits for Chinese IME composition to finish', () => {
   const listeners={},timers=[],input={isConnected:true,addEventListener(type,handler){listeners[type]=handler}};
@@ -28,6 +28,8 @@ test('recipe search ignores a delayed refresh after leaving the recipe page', ()
 import { createDefaultTemplate } from '../src/features/schedule/template.js';
 import { createBackup } from '../src/features/backup/backup.js';
 import { AppStore } from '../src/store.js';
+import { createMenuBrowser } from '../src/features/meals/menu-browser.js';
+import { mealsView } from '../src/ui/meals.js';
 
 test('targeted history mutation writes only the requested weekly menu',async()=>{
   const repo=new MemoryRepository({weeklyMenus:[{id:'current',babyId:'b1',startDate:'2026-08-10',value:1},{id:'old',babyId:'b1',startDate:'2026-08-03',value:2}]});
@@ -54,6 +56,27 @@ test('current menu overwrite cancellation preserves storage',async()=>{
   let generated=false,saved=false;
   const result=await generateCurrentMenu({repository:{},weeks:[],current:{id:'current'},baby:{id:'b1',stage:'stage4'},recipes:[],date:'2026-08-15',confirm:message=>{assert.match(message,/覆盖/);return false},generate:()=>{generated=true},save:async()=>{saved=true}});
   assert.equal(result,null);assert.equal(generated,false);assert.equal(saved,false);
+});
+
+test('rejected history confirmation keeps the selected menu read only',()=>{
+  const browser=createMenuBrowser(),old={id:'old',babyId:'b1',startDate:'2026-08-03',days:[{date:'2026-08-03',meals:[{id:'m',name:'午饭'},{id:'d',name:'晚饭'}]}]};
+  browser.showHistory('old');
+  assert.equal(confirmHistoryEdit(browser,()=>false),false);
+  assert.equal(browser.value().editingHistory,false);
+  assert.doesNotMatch(mealsView({week:null,weeks:[old],menuBrowser:browser.value()}),/data-action="replace-meal"|data-action="meal-status"/);
+});
+
+test('failed menu save preserves old repository and store references, toasts, and unlocks retry',async()=>{
+  const current={id:'current',babyId:'b1',startDate:'2026-08-10'},weeks=[current],repo=new MemoryRepository({weeklyMenus:[current]}),messages=[],button={disabled:false};
+  const options={button,notify:message=>messages.push(message),refresh:async()=>{throw new Error('should not refresh')},showCurrent:()=>{throw new Error('should not switch')},generation:{repository:repo,weeks,current,baby:{id:'b1',stage:'stage4'},recipes:[],date:'2026-08-15',confirm:()=>true,generate:()=>({id:'new',babyId:'b1',startDate:'2026-08-10',days:[]}),save:async()=>{throw new Error('保存失败')}}};
+  assert.equal(await runMenuGeneration(options),null);
+  assert.strictEqual(weeks[0],current);
+  assert.deepEqual(await repo.get('weeklyMenus','current'),current);
+  assert.deepEqual(messages,['保存失败']);
+  assert.equal(button.disabled,false);
+  options.generation.save=async()=>{};
+  options.showCurrent=()=>{};options.refresh=async()=>{};
+  assert.notEqual(await runMenuGeneration(options),null);
 });
 
 test('startup requests onboarding when there is no baby', async () => {

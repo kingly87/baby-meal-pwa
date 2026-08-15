@@ -1,3 +1,10 @@
+import{weekStart}from'./week-menu.js';
+
+export function historyMenus(menus,{babyId,date}={}){
+  let currentWeek;try{currentWeek=weekStart(date)}catch{return[]}
+  return menus.filter(menu=>{if(menu?.babyId!==babyId)return false;try{return weekStart(menu.startDate??menu.days?.[0]?.date)!==currentWeek}catch{return false}}).sort((a,b)=>String(b.startDate||'').localeCompare(String(a.startDate||'')));
+}
+
 export function createMenuBrowser(){
   let state={mode:'current',selectedId:null,editingHistory:false};
   return{

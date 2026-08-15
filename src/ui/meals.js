@@ -2,6 +2,7 @@ import{esc}from'./render.js';
 import{cleanRecipeName,mealSummary,presentMeal}from'../features/meals/presentation.js';
 import{recipeShape}from'../features/meals/recipe-details.js';
 import{normalizeMenu,weekRange}from'../features/meals/week-menu.js';
+import{historyMenus}from'../features/meals/menu-browser.js';
 
 const mealTypeLabels={breakfast:'早餐',lunch:'午餐',dinner:'晚餐'};
 
@@ -42,7 +43,7 @@ export function mealsView({week,weeks=[],menuBrowser={},recipes=[],stage='stage4
   const favorites=new Set(preferences.favorites||[]),disliked=preferences.disliked||[],byId=new Map(recipes.map(recipe=>[recipe.id,recipe]));
   const filters={stage:recipeBrowser.stage||stage,query:recipeBrowser.query||'',chewingLevel:recipeBrowser.chewingLevel||'all',fingerFood:recipeBrowser.fingerFood||'all'},limit=Math.max(1,Number(recipeBrowser.limit)||24);
   const matched=recipes.filter(recipe=>recipeMatchesFilters(recipe,filters)),shown=matched.slice(0,limit),selected=(value,current)=>value===current?' selected':'';
-  const history=weeks.filter(menu=>menu.id!==week?.id).sort((a,b)=>String(b.startDate||'').localeCompare(String(a.startDate||''))),mode=menuBrowser.mode==='history'?'history':'current';
+  const history=week?historyMenus(weeks,{babyId:week.babyId,date:week.startDate??week.days?.[0]?.date}):[...weeks].sort((a,b)=>String(b.startDate||'').localeCompare(String(a.startDate||''))),mode=menuBrowser.mode==='history'?'history':'current';
   const chosen=mode==='history'?history.find(menu=>menu.id===menuBrowser.selectedId):week,shownMenu=normalizeMenu(chosen),editable=mode==='current'||Boolean(menuBrowser.editingHistory);
   const weekHtml=shownMenu?.days?.map(day=>`<article class="day-card"><h3>${day.date.slice(5)}</h3>${day.meals.map(meal=>weeklyMeal(meal,byId.get(meal.recipeId),{editable,menuId:shownMenu.id})).join('')}</article>`).join('')||`<div class="empty">${mode==='history'?'请选择历史菜单。':'还没有本周菜单。'}</div>`;
   const historyHtml=history.map(menu=>{let range;try{range=weekRange(menu.startDate)}catch{range={startDate:menu.startDate||'日期未知',endDate:'日期未知'}}return`<button data-action="select-history" data-id="${esc(menu.id)}" aria-pressed="${mode==='history'&&menu.id===menuBrowser.selectedId}">${esc(range.startDate)} 至 ${esc(range.endDate)}</button>`}).join('')||'<div class="empty">暂无历史菜单。</div>';
