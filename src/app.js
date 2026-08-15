@@ -8,7 +8,7 @@ import{createDefaultTemplate}from'./features/schedule/template.js';
 import{generateTasks,completeTask,skipTask,adjustTask,updateOverdue}from'./features/schedule/engine.js';
 import{selectPrimaryTask}from'./features/schedule/select-current.js';
 import{generateWeek,setMealStatus}from'./features/meals/planner.js';
-import{saveCurrentMenu,weekStart}from'./features/meals/week-menu.js';
+import{menuRange,saveCurrentMenu}from'./features/meals/week-menu.js';
 import{createMenuBrowser,historyMenus,runMenuMutation,runReplaceMenuMutation,resetMenuBrowserForBoundary}from'./features/meals/menu-browser.js';
 import{persistRecipePreference}from'./features/meals/preferences.js';
 import{buildShoppingList}from'./features/meals/shopping.js';
@@ -34,7 +34,7 @@ import{toast}from'./ui/feedback.js';
 import{openDialog,openActionDialog}from'./ui/dialogs.js';
 
 const menuGenerationFlights=new Map();
-export function generateCurrentMenu({repository,weeks,current,baby,recipes:catalog,date=localDateKey(),confirm=globalThis.confirm,generate=generateWeek,save=saveCurrentMenu,createId:idFactory=createId}){const key=baby.id;if(menuGenerationFlights.has(key))return menuGenerationFlights.get(key);if(current&&!confirm('本周菜单已存在，继续将覆盖本周菜单，是否继续？'))return Promise.resolve(null);const flight=(async()=>{const generated=generate(catalog,{babyId:baby.id,stage:baby.stage,startDate:weekStart(date),createId:idFactory});await save(repository,weeks,generated);return generated})().finally(()=>menuGenerationFlights.delete(key));menuGenerationFlights.set(key,flight);return flight}
+export function generateCurrentMenu({repository,weeks,current,baby,recipes:catalog,date=localDateKey(),confirm=globalThis.confirm,generate=generateWeek,save=saveCurrentMenu,createId:idFactory=createId}){const key=baby.id;if(menuGenerationFlights.has(key))return menuGenerationFlights.get(key);const startDate=menuRange(date).startDate;if(current?.startDate===startDate&&!confirm('本周菜单已存在，继续将覆盖本周菜单，是否继续？'))return Promise.resolve(null);const flight=(async()=>{const generated=generate(catalog,{babyId:baby.id,stage:baby.stage,startDate,createId:idFactory});await save(repository,weeks,generated);return generated})().finally(()=>menuGenerationFlights.delete(key));menuGenerationFlights.set(key,flight);return flight}
 export function confirmHistoryEdit(browser,ask=globalThis.confirm){if(!ask('正在修改过去的饮食记录，是否继续？'))return false;browser.editHistory();return true}
 export async function runMenuGeneration({button,notify=toast,refresh,showCurrent,generation}){if(button.disabled)return null;button.disabled=true;try{const generated=await generateCurrentMenu(generation);if(!generated)return null;showCurrent();await refresh();return generated}catch(error){notify(error.message);return null}finally{button.disabled=false}}
 export async function runMenuGenerationClick({event,loadPreferences,buildOptions}){const button=event.currentTarget,prefs=await loadPreferences();return runMenuGeneration({button,...buildOptions(prefs)})}

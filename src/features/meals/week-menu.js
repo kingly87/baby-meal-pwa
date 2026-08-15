@@ -27,15 +27,8 @@ function addLocalDays(value, days) {
   return localDateKey(date);
 }
 
-export function weekStart(value) {
-  const date = parseLocalDate(value);
-  const daysSinceMonday = (date.getDay() + 6) % 7;
-  date.setDate(date.getDate() - daysSinceMonday);
-  return localDateKey(date);
-}
-
-export function weekRange(value) {
-  const startDate = weekStart(value);
+export function menuRange(value) {
+  const startDate = localDateKey(parseLocalDate(value));
   return { startDate, endDate: addLocalDays(startDate, 6) };
 }
 

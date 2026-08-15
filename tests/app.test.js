@@ -30,6 +30,7 @@ import { createBackup } from '../src/features/backup/backup.js';
 import { AppStore } from '../src/store.js';
 import { createMenuBrowser, updateMenuAtomically } from '../src/features/meals/menu-browser.js';
 import { mealsView } from '../src/ui/meals.js';
+import { recipes } from '../data/recipes.js';
 
 test('targeted history mutation writes only the requested weekly menu',async()=>{
   const repo=new MemoryRepository({weeklyMenus:[{id:'current',babyId:'b1',startDate:'2026-08-10',value:1},{id:'old',babyId:'b1',startDate:'2026-08-03',value:2}]});
@@ -39,22 +40,39 @@ test('targeted history mutation writes only the requested weekly menu',async()=>
   await assert.rejects(updateMenuAtomically({repository:repo,menuId:'missing',babyId:'b1',mutate:value=>value}),/菜单不存在/);
 });
 
-test('current menu generation creates 21 meals, confirms overwrite and is single flight',async()=>{
+test('current menu generation uses the requested local date, creates 21 meals, confirms same-date overwrite and is single flight',async()=>{
   let calls=0,release;
   const pending=new Promise(resolve=>{release=resolve});
-  const generated={id:'new',babyId:'b1',startDate:'2026-08-10',days:Array.from({length:7},()=>({meals:[{},{},{}]}))};
-  const options={repository:{},weeks:[{id:'current'}],current:{id:'current'},baby:{id:'b1',stage:'stage4'},recipes:[],date:'2026-08-15',confirm:()=>true,generate:(catalog,input)=>{calls++;assert.equal(input.startDate,'2026-08-10');assert.equal(Object.hasOwn(input,'mealCount'),false);return generated},save:async()=>{await pending}};
+  const generated={id:'new',babyId:'b1',startDate:'2026-08-15',days:Array.from({length:7},(_,index)=>({date:`2026-08-${15+index}`,meals:[{},{},{}]}))};
+  const options={repository:{},weeks:[{id:'current'}],current:{id:'current',startDate:'2026-08-15'},baby:{id:'b1',stage:'stage4'},recipes:[],date:'2026-08-15',confirm:()=>true,generate:(catalog,input)=>{calls++;assert.equal(input.startDate,'2026-08-15');assert.equal(Object.hasOwn(input,'mealCount'),false);return generated},save:async()=>{await pending}};
   const first=generateCurrentMenu(options),second=generateCurrentMenu(options);
   assert.strictEqual(first,second);
   assert.equal(calls,1);
   release();
   assert.strictEqual(await first,generated);
   assert.equal(generated.days.flatMap(day=>day.meals).length,21);
+  assert.deepEqual(generated.days.map(day=>day.date),['2026-08-15','2026-08-16','2026-08-17','2026-08-18','2026-08-19','2026-08-20','2026-08-21']);
+});
+
+test('menu generation treats an earlier menu as history and does not confirm overwrite',async()=>{
+  let confirmations=0;
+  const generated={id:'new',babyId:'b1',startDate:'2026-08-15',days:[]};
+  const result=await generateCurrentMenu({repository:{},weeks:[],current:{id:'old',startDate:'2026-08-10'},baby:{id:'b1',stage:'stage4'},recipes:[],date:'2026-08-15',confirm:()=>{confirmations++;return false},generate:()=>generated,save:async()=>{}});
+  assert.strictEqual(result,generated);
+  assert.equal(confirmations,0);
+});
+
+test('menu generation with the real stage4 catalog produces three meals for seven exact local dates',async()=>{
+  let sequence=0;
+  const generated=await generateCurrentMenu({repository:{},weeks:[],current:null,baby:{id:'real-catalog-baby',stage:'stage4'},recipes,date:'2026-08-15',createId:()=>`generated-${++sequence}`,save:async()=>{}});
+  assert.equal(generated.startDate,'2026-08-15');
+  assert.deepEqual(generated.days.map(day=>day.date),['2026-08-15','2026-08-16','2026-08-17','2026-08-18','2026-08-19','2026-08-20','2026-08-21']);
+  assert.equal(generated.days.flatMap(day=>day.meals).length,21);
 });
 
 test('current menu overwrite cancellation preserves storage',async()=>{
   let generated=false,saved=false;
-  const result=await generateCurrentMenu({repository:{},weeks:[],current:{id:'current'},baby:{id:'b1',stage:'stage4'},recipes:[],date:'2026-08-15',confirm:message=>{assert.match(message,/覆盖/);return false},generate:()=>{generated=true},save:async()=>{saved=true}});
+  const result=await generateCurrentMenu({repository:{},weeks:[],current:{id:'current',startDate:'2026-08-15'},baby:{id:'b1',stage:'stage4'},recipes:[],date:'2026-08-15',confirm:message=>{assert.match(message,/覆盖/);return false},generate:()=>{generated=true},save:async()=>{saved=true}});
   assert.equal(result,null);assert.equal(generated,false);assert.equal(saved,false);
 });
 

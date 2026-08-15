@@ -1,7 +1,7 @@
 import{esc}from'./render.js';
 import{cleanRecipeName,mealSummary,presentMeal}from'../features/meals/presentation.js';
 import{recipeShape}from'../features/meals/recipe-details.js';
-import{normalizeMenu,weekRange}from'../features/meals/week-menu.js';
+import{menuRange,normalizeMenu}from'../features/meals/week-menu.js';
 import{historyMenus}from'../features/meals/menu-browser.js';
 
 const mealTypeLabels={breakfast:'早餐',lunch:'午餐',dinner:'晚餐'};
@@ -45,9 +45,10 @@ export function mealsView({week,weeks=[],menuBrowser={},recipes=[],stage='stage4
   const matched=recipes.filter(recipe=>recipeMatchesFilters(recipe,filters)),shown=matched.slice(0,limit),selected=(value,current)=>value===current?' selected':'';
   const history=week?historyMenus(weeks,{babyId:week.babyId,date:week.startDate??week.days?.[0]?.date}):[...weeks].sort((a,b)=>String(b.startDate||'').localeCompare(String(a.startDate||''))),mode=menuBrowser.mode==='history'?'history':'current';
   const chosen=mode==='history'?history.find(menu=>menu.id===menuBrowser.selectedId):week,shownMenu=normalizeMenu(chosen),editable=mode==='current'||Boolean(menuBrowser.editingHistory);
+  let shownRangeHtml='';try{const range=menuRange(shownMenu?.startDate);shownRangeHtml=`<p class="menu-range">${esc(range.startDate)} 至 ${esc(range.endDate)}</p>`}catch{}
   const weekHtml=shownMenu?.days?.map(day=>`<article class="day-card"><h3>${day.date.slice(5)}</h3>${day.meals.map(meal=>weeklyMeal(meal,byId.get(meal.recipeId),{editable,menuId:shownMenu.id})).join('')}</article>`).join('')||`<div class="empty">${mode==='history'?'请选择历史菜单。':'还没有本周菜单。'}</div>`;
-  const historyHtml=history.map(menu=>{let range;try{range=weekRange(menu.startDate)}catch{range={startDate:menu.startDate||'日期未知',endDate:'日期未知'}}return`<button data-action="select-history" data-id="${esc(menu.id)}" aria-pressed="${mode==='history'&&menu.id===menuBrowser.selectedId}">${esc(range.startDate)} 至 ${esc(range.endDate)}</button>`}).join('')||'<div class="empty">暂无历史菜单。</div>';
-  const menuNav=`<div class="menu-tabs"><button data-action="menu-current" aria-pressed="${mode==='current'}">本周菜单</button><button data-action="menu-history" aria-pressed="${mode==='history'}">历史菜单</button></div><div class="history-list" ${mode==='history'?'':'hidden'}>${historyHtml}</div>`;
+  const historyHtml=history.map(menu=>{let range;try{range=menuRange(menu.startDate)}catch{range={startDate:menu.startDate||'日期未知',endDate:'日期未知'}}return`<button data-action="select-history" data-id="${esc(menu.id)}" aria-pressed="${mode==='history'&&menu.id===menuBrowser.selectedId}">${esc(range.startDate)} 至 ${esc(range.endDate)}</button>`}).join('')||'<div class="empty">暂无历史菜单。</div>';
+  const menuNav=`<div class="menu-tabs"><button data-action="menu-current" aria-pressed="${mode==='current'}">本周菜单</button><button data-action="menu-history" aria-pressed="${mode==='history'}">历史菜单</button></div>${shownRangeHtml}<div class="history-list" ${mode==='history'?'':'hidden'}>${historyHtml}</div>`;
   const historyEdit=mode==='history'&&shownMenu&&!menuBrowser.editingHistory?'<button class="button secondary" data-action="edit-history">修改记录</button>':'';
   const shoppingHtml=shopping.length?shopping.map(item=>`<label class="shopping-row"><input type="checkbox" data-action="toggle-shopping" data-id="${esc(item.id)}" ${item.done?'checked':''}><span>${esc(item.name)} × ${item.quantity||1}</span><button type="button" data-action="stock-shopping" data-id="${esc(item.id)}">${item.inStock?'取消库存':'家里有'}</button></label>`).join(''):'<div class="empty">生成菜单后可自动整理清单。</div>';
   const more=shown.length<matched.length?`<button class="button secondary recipe-load-more" data-action="load-more-recipes">加载更多</button>`:'';

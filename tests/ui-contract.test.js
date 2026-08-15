@@ -186,10 +186,13 @@ test('menu tabs render sorted history ranges and normalize three meal labels',()
   assert.deepEqual(current.days[0].meals.map(meal=>meal.mealType),[undefined,undefined,undefined]);
 });
 
-test('menu view excludes duplicate records belonging to the current natural week',()=>{
-  const current={id:'current',babyId:'b1',startDate:'2026-08-10',days:[]},duplicate={id:'duplicate',babyId:'b1',startDate:'2026-08-13',days:[]},old={id:'old',babyId:'b1',startDate:'2026-08-03',days:[]};
-  const html=mealsView({week:current,weeks:[current,duplicate,old],menuBrowser:{mode:'current'}});
-  assert.doesNotMatch(html,/data-id="duplicate"/);
+test('menu view keeps an earlier same-week menu as history but excludes exact-date duplicates',()=>{
+  const current={id:'current',babyId:'b1',startDate:'2026-08-15',days:[]},sameDate={id:'same-date',babyId:'b1',startDate:'2026-08-15',days:[]},earlier={id:'earlier',babyId:'b1',startDate:'2026-08-13',days:[]},old={id:'old',babyId:'b1',startDate:'2026-08-03',days:[]};
+  const html=mealsView({week:current,weeks:[current,sameDate,earlier,old],menuBrowser:{mode:'current'}});
+  assert.doesNotMatch(html,/data-id="same-date"/);
+  assert.match(html,/data-id="earlier"/);
+  assert.match(html,/2026-08-15[^<]*至[^<]*2026-08-21/);
+  assert.match(html,/2026-08-13[^<]*至[^<]*2026-08-19/);
   assert.match(html,/data-id="old"/);
 });
 

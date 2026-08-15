@@ -5,8 +5,7 @@ import {
   findMenuForDate,
   normalizeMenu,
   saveCurrentMenu,
-  weekRange,
-  weekStart
+  menuRange
 } from '../src/features/meals/week-menu.js';
 
 class TrackingMemoryRepository extends MemoryRepository {
@@ -21,11 +20,6 @@ class TrackingMemoryRepository extends MemoryRepository {
     return super.delete(store, id);
   }
 }
-
-test('weekStart normalizes a local calendar date to Monday', () => {
-  assert.equal(weekStart('2026-08-15'), '2026-08-10');
-  assert.equal(weekStart('2026-08-10'), '2026-08-10');
-});
 
 test('saveCurrentMenu adds a menu for an exact date with one put', async () => {
   const repository = new TrackingMemoryRepository();
@@ -138,27 +132,27 @@ test('saveCurrentMenu serializes concurrent first writes for the same date into 
   assert.equal(menus.length, 1);
 });
 
-test('weekRange spans Monday through Sunday', () => {
-  assert.deepEqual(weekRange('2026-08-15'), {
-    startDate: '2026-08-10',
-    endDate: '2026-08-16'
+test('menuRange spans seven exact local dates from the menu start', () => {
+  assert.deepEqual(menuRange('2026-08-15'), {
+    startDate: '2026-08-15',
+    endDate: '2026-08-21'
   });
 });
 
-test('week calculations safely cross month and year boundaries', () => {
-  assert.deepEqual(weekRange('2026-09-01'), {
-    startDate: '2026-08-31',
-    endDate: '2026-09-06'
+test('menu ranges safely cross month and year boundaries', () => {
+  assert.deepEqual(menuRange('2026-09-01'), {
+    startDate: '2026-09-01',
+    endDate: '2026-09-07'
   });
-  assert.deepEqual(weekRange('2027-01-01'), {
-    startDate: '2026-12-28',
-    endDate: '2027-01-03'
+  assert.deepEqual(menuRange('2027-01-01'), {
+    startDate: '2027-01-01',
+    endDate: '2027-01-07'
   });
 });
 
-test('weekStart rejects malformed and impossible dates', () => {
+test('menuRange rejects malformed and impossible dates', () => {
   for (const value of ['2026-2-03', '2026-02-30', 'not-a-date', '', null]) {
-    assert.throws(() => weekStart(value), /菜单日期无效/);
+    assert.throws(() => menuRange(value), /菜单日期无效/);
   }
 });
 
