@@ -82,3 +82,26 @@ export function findMenuForWeek(menus, { babyId, date } = {}) {
   });
   return menu ? normalizeMenu(menu) : null;
 }
+
+export async function saveCurrentWeek(repository, menus, generated, nowISO) {
+  if (typeof generated?.babyId !== 'string' || !generated.babyId.trim()) {
+    throw new Error('generated.babyId must be a non-empty string');
+  }
+  try {
+    weekStart(generated.startDate);
+  } catch {
+    throw new Error('generated.startDate must be a valid local date');
+  }
+
+  const existing = findMenuForWeek(menus, {
+    babyId: generated.babyId,
+    date: generated.startDate
+  });
+  const value = structuredClone(generated);
+  if (existing) {
+    value.id = existing.id;
+    value.createdAt = existing.createdAt;
+    value.updatedAt = nowISO ?? new Date().toISOString();
+  }
+  return repository.put('weeklyMenus', value);
+}
