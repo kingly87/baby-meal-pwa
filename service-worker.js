@@ -1,4 +1,4 @@
-const CACHE_NAME='baby-growth-v1-20260720-r27';
+const CACHE_NAME='baby-growth-v1-20260720-r28';
 const APP_SHELL=[
   "./","./index.html","./manifest.webmanifest","./assets/styles/app.css","./assets/icons/icon.svg","./assets/icons/icon-192.svg","./assets/icons/icon-512.svg","./data/recipes.js","./data/recipes-base.js","./data/stage4-recipes-v2.js","./data/stage4-recipes-v2-rows.js",
   "./src/app.js","./src/db.js","./src/store.js","./src/router.js","./src/core/id.js","./src/core/dates.js","./src/core/schema.js",

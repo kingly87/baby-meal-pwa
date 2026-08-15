@@ -1,5 +1,11 @@
 # PROJECT_STATE
 
+## 2026-08-15 Final mobile acceptance fix
+
+- Fixed the real browser menu-generation click path by capturing the clicked button before asynchronous preference loading.
+- Service Worker cache revision is `baby-growth-v1-20260720-r28`.
+- Verification: 282 automated tests passed. Manual browser acceptance at 375px confirmed 7 days x breakfast/lunch/dinner (21 meals), exact daily value/date labels, contained 14-day horizontal scrolling, and no page-level horizontal overflow.
+
 ## 2026-08-15 三餐菜单与历史发布准备
 
 - 自动化测试已覆盖每日早餐、午餐、晚餐三餐菜单，以及历史菜单需确认后才可编辑。

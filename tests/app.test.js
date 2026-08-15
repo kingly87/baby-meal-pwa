@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { MemoryRepository } from '../src/db.js';
-import { loadApplicationModel, bindOnboardingActions, bindRecipeSearchInput, ensureDailySchedule, recalculateScheduleForSleep, loadDailyTrend, createTrendState, loadRenderData, runRefreshCycle, createRefreshCoordinator, createAsyncEpoch, runNotificationSchedule, runDataReplacement, changeNotificationScheduling, lockApplicationAfterCommittedReplacement, syncNotifiedTasks, generateCurrentMenu, confirmHistoryEdit, runMenuGeneration } from '../src/app.js';
+import { loadApplicationModel, bindOnboardingActions, bindRecipeSearchInput, ensureDailySchedule, recalculateScheduleForSleep, loadDailyTrend, createTrendState, loadRenderData, runRefreshCycle, createRefreshCoordinator, createAsyncEpoch, runNotificationSchedule, runDataReplacement, changeNotificationScheduling, lockApplicationAfterCommittedReplacement, syncNotifiedTasks, generateCurrentMenu, confirmHistoryEdit, runMenuGeneration, runMenuGenerationClick } from '../src/app.js';
 
 test('recipe search waits for Chinese IME composition to finish', () => {
   const listeners={},timers=[],input={isConnected:true,addEventListener(type,handler){listeners[type]=handler}};
@@ -77,6 +77,18 @@ test('failed menu save preserves old repository and store references, toasts, an
   options.generation.save=async()=>{};
   options.showCurrent=()=>{};options.refresh=async()=>{};
   assert.notEqual(await runMenuGeneration(options),null);
+});
+
+test('menu generation click captures its button before asynchronous preference loading',async()=>{
+  const button={disabled:false};
+  const event={currentTarget:button};
+  let release;
+  const pending=new Promise(resolve=>{release=resolve});
+  const result=runMenuGenerationClick({event,loadPreferences:async()=>{await pending;return{}},buildOptions:()=>({notify:()=>{},refresh:async()=>{},showCurrent:()=>{},generation:{repository:{},weeks:[],current:null,baby:{id:'b1',stage:'stage4'},recipes:[],generate:()=>({id:'menu'}),save:async()=>{}}})});
+  event.currentTarget=null;
+  release();
+  assert.deepEqual(await result,{id:'menu'});
+  assert.equal(button.disabled,false);
 });
 
 test('startup requests onboarding when there is no baby', async () => {
