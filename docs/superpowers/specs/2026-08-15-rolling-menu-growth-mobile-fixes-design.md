@@ -47,6 +47,8 @@ Make weekly menus start on the day they are generated, retain at most six menus 
 - Do not add `user-scalable=no` or otherwise disable pinch zoom.
 - Keep the full-timeline filter as a compact native select instead of converting it to multiple buttons.
 - Ensure the timeline select has a phone-sized touch target, correct stacking order, and no overlay intercepting taps.
+- Keep the full timeline in a bounded region sized to show roughly three days of recent entries; additional entries scroll vertically inside that region instead of lengthening the entire growth page.
+- Internal timeline scrolling must remain usable after changing the record-type filter and must not create document-level horizontal overflow.
 - Verify that the whole document has no horizontal overflow at 320px and 375px, while intentional internal chart scrolling remains contained.
 
 ## Data Flow
@@ -69,8 +71,8 @@ Make weekly menus start on the day they are generated, retain at most six menus 
 - Automated tests cover today-based seven-day generation, same-day overwrite, imported older menus remaining historical, six-menu retention, baby isolation, and rollback/error behavior.
 - Automated tests cover latest weight, height, and tooth summaries, including invalid and same-date records.
 - Automated tests prove naps no longer move meals while night sleep anchoring still works.
-- UI contract tests cover removal of the nap setting, accessible timeline select behavior, and responsive Settings controls.
-- Manual browser acceptance at 320px and 375px checks Settings pinch/layout recovery, timeline filter tapping, today-based menu dates, latest growth values, and absence of document-level horizontal overflow.
+- UI contract tests cover removal of the nap setting, accessible timeline select behavior, bounded internal timeline scrolling, and responsive Settings controls.
+- Manual browser acceptance at 320px and 375px checks Settings pinch/layout recovery, timeline filter tapping, three-day-height internal timeline scrolling, today-based menu dates, latest growth values, and absence of document-level horizontal overflow.
 - Full `npm.cmd test`, `npm.cmd run check`, and `git diff --check` must pass before release.
 
 ## Rollback
