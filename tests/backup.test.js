@@ -81,6 +81,21 @@ test('backup accepts legacy meals without mealType and all supported meal types'
   assert.equal(result.recordCount,2);
 });
 
+test('backup accepts legacy natural-week menus, exact-date menus and nap interval templates', () => {
+  const base={app:'baby-growth-assistant',schemaVersion:1,data:{babies:[{id:'b1',name:'Baby',stage:'stage4'}]}};
+  const weeklyMenus=[
+    {id:'legacy-week',babyId:'b1',startDate:'2026-08-10',days:[{date:'2026-08-10',meals:[]}]},
+    {id:'exact-date',babyId:'b1',startDate:'2026-08-15',days:[{date:'2026-08-15',meals:[]}]}
+  ];
+  const scheduleTemplates=[{
+    id:'legacy-template',babyId:'b1',napToMealMinutes:90,
+    rules:[{type:'wake',title:'Wake',afterMinutes:0}]
+  }];
+  const result=previewBackup(JSON.stringify({...base,data:{...base.data,weeklyMenus,scheduleTemplates}}));
+  assert.equal(result.babyCount,1);
+  assert.equal(result.recordCount,4);
+});
+
 test('backup rejects an unsupported explicit mealType', () => {
   const base={app:'baby-growth-assistant',schemaVersion:1,data:{babies:[{id:'b1',name:'Baby',stage:'stage4'}]}};
   for(const mealType of ['snack',null]) {

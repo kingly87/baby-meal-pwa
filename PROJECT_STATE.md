@@ -1,5 +1,12 @@
 # PROJECT_STATE
 
+## 2026-08-15 Rolling-menu mobile release
+
+- Service Worker cache revision is `baby-growth-v1-20260720-r29`; the application shell includes every JavaScript file under `src`, including `src/features/growth/latest-summary.js`.
+- Automated Service Worker tests verify app-owned obsolete-cache cleanup, current-cache-only reads, navigation network-first behavior, and asset cache-first behavior.
+- Real `previewBackup` tests accept legacy natural-week menus, exact-date menus, and legacy schedule templates that retain `napToMealMinutes`.
+- Automated verification: `npm.cmd test` passed all 305 tests. Manual browser acceptance for this release has not been performed and remains for the final release owner.
+
 ## 2026-08-15 Final mobile acceptance fix
 
 - Fixed the real browser menu-generation click path by capturing the clicked button before asynchronous preference loading.
