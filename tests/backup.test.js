@@ -47,6 +47,27 @@ test('backup rejects malformed nested menus and task dates', () => {
   assert.throws(()=>previewBackup(JSON.stringify({...base,data:{...base.data,taskInstances:[{id:'t1',babyId:'b1',date:'bad',plannedAt:'bad'}]}})),/taskInstances/);
 });
 
+test('backup accepts legacy meals without mealType and all supported meal types', () => {
+  const base={app:'baby-growth-assistant',schemaVersion:1,data:{babies:[{id:'b1',name:'Baby',stage:'stage4'}]}};
+  const meals=[
+    {id:'m1',name:'Legacy meal',status:'planned'},
+    {id:'m2',name:'Breakfast',status:'planned',mealType:'breakfast'},
+    {id:'m3',name:'Lunch',status:'eaten',mealType:'lunch'},
+    {id:'m4',name:'Dinner',status:'skipped',mealType:'dinner'}
+  ];
+  const result=previewBackup(JSON.stringify({...base,data:{...base.data,weeklyMenus:[{id:'w1',babyId:'b1',days:[{date:'2026-08-15',meals}]}]}}));
+  assert.equal(result.babyCount,1);
+  assert.equal(result.recordCount,2);
+});
+
+test('backup rejects an unsupported explicit mealType', () => {
+  const base={app:'baby-growth-assistant',schemaVersion:1,data:{babies:[{id:'b1',name:'Baby',stage:'stage4'}]}};
+  for(const mealType of ['snack',null]) {
+    const weeklyMenus=[{id:'w1',babyId:'b1',days:[{date:'2026-08-15',meals:[{id:'m1',name:'Unsupported',status:'planned',mealType}]}]}];
+    assert.throws(()=>previewBackup(JSON.stringify({...base,data:{...base.data,weeklyMenus}})),/weeklyMenus/);
+  }
+});
+
 test('backup validates templates preferences reminders and application settings', () => {
   const base={app:'baby-growth-assistant',schemaVersion:1,data:{babies:[{id:'b1',name:'柚柚',stage:'stage4'}]}};
   const invalid=[
