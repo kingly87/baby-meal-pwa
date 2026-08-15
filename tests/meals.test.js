@@ -14,7 +14,7 @@ test('excluded foods and stage are hard constraints', () => {
 
 test('weekly generation creates stable meals without bypassing exclusions', () => {
   let sequence = 0;
-  const week = generateWeek(recipes, { babyId: 'b1', stage: 'stage3', startDate: '2026-07-20', mealCount: 2, excluded: ['虾'], random: () => .1, createId: () => `m${++sequence}` });
+  const week = generateWeek(recipes, { babyId: 'b1', stage: 'stage3', startDate: '2026-07-20', mealTypes: ['lunch', 'dinner'], excluded: ['虾'], random: () => .1, createId: () => `m${++sequence}` });
   assert.equal(week.days.length, 7);
   assert.equal(week.days.flatMap(d => d.meals).length, 14);
   assert.equal(new Set(week.days.flatMap(d => d.meals).map(m => m.id)).size, 14);
@@ -24,7 +24,7 @@ test('weekly generation creates stable meals without bypassing exclusions', () =
 
 test('replacement stays safe and shopping list aggregates ingredients', () => {
   let sequence = 0;
-  const week = generateWeek(recipes, { babyId: 'b1', stage: 'stage2', startDate: '2026-07-20', mealCount: 1, excluded: ['蛋'], random: () => .2, createId: () => `m${++sequence}` });
+  const week = generateWeek(recipes, { babyId: 'b1', stage: 'stage2', startDate: '2026-07-20', mealTypes: ['lunch'], excluded: ['蛋'], random: () => .2, createId: () => `m${++sequence}` });
   const changed = replaceMeal(week, week.days[0].meals[0].id, recipes, { stage: 'stage2', excluded: ['蛋'], random: () => .8 });
   assert.equal(changed.days[0].meals[0].id, week.days[0].meals[0].id);
   assert.notEqual(changed.days[0].meals[0].recipeId, undefined);
@@ -36,10 +36,148 @@ test('replacement stays safe and shopping list aggregates ingredients', () => {
 function generatedRecipeIds(catalog, overrides = {}) {
   let sequence = 0;
   return generateWeek(catalog, {
-    babyId: 'b1', stage: 'stage4', startDate: '2026-08-11', mealCount: 1,
+    babyId: 'b1', stage: 'stage4', startDate: '2026-08-11', mealTypes: ['lunch'],
     random: () => 0, createId: () => `m${++sequence}`, ...overrides
   }).days.flatMap(day => day.meals).map(meal => meal.recipeId);
 }
+
+const mealSlotRecipe = (id, mealSlots, extra = {}) => rotationRecipe(
+  id,
+  extra.group || `group-${id}`,
+  extra.texture || `texture-${id}`,
+  extra.cookingMethod || `method-${id}`,
+  { mealSlots, ...extra }
+);
+
+test('default weekly menu creates breakfast lunch and dinner in stable order', () => {
+  let sequence = 0;
+  const catalog = [
+    mealSlotRecipe('breakfast', ['早餐']),
+    mealSlotRecipe('lunch', ['午餐']),
+    mealSlotRecipe('dinner', ['晚餐'])
+  ];
+  const week = generateWeek(catalog, {
+    babyId: 'b1', stage: 'stage4', startDate: '2026-08-11',
+    random: () => 0, createId: () => `id-${++sequence}`
+  });
+  const meals = week.days.flatMap(day => day.meals);
+  assert.equal(meals.length, 21);
+  assert.deepEqual(week.days[0].meals.map(meal => meal.mealType), ['breakfast', 'lunch', 'dinner']);
+  assert.deepEqual(week.days[0].meals.map(meal => meal.slot), [0, 1, 2]);
+  assert.equal(new Set(meals.map(meal => meal.id)).size, 21);
+});
+
+test('breakfast requires an explicit breakfast meal slot', () => {
+  const catalog = [
+    mealSlotRecipe('breakfast', ['早餐']),
+    mealSlotRecipe('legacy', undefined),
+    mealSlotRecipe('lunch', ['午餐'])
+  ];
+  const week = generateWeek(catalog, {
+    babyId: 'b1', stage: 'stage4', startDate: '2026-08-11', mealTypes: ['breakfast'],
+    random: () => .99, createId: () => crypto.randomUUID()
+  });
+  assert.ok(week.days.flatMap(day => day.meals).every(meal => meal.recipeId === 'breakfast'));
+});
+
+test('weekly generation fails clearly when no safe breakfast exists', () => {
+  const catalog = [mealSlotRecipe('lunch', ['午餐', '晚餐'])];
+  assert.throws(() => generateWeek(catalog, {
+    babyId: 'b1', stage: 'stage4', startDate: '2026-08-11', createId: () => 'unused'
+  }), /早餐/);
+});
+
+test('lunch and dinner accept legacy recipes but reject breakfast-only recipes', () => {
+  const catalog = [
+    mealSlotRecipe('breakfast-only', ['早餐']),
+    mealSlotRecipe('legacy', undefined)
+  ];
+  const week = generateWeek(catalog, {
+    babyId: 'b1', stage: 'stage4', startDate: '2026-08-11', mealTypes: ['lunch', 'dinner'],
+    random: () => 0, createId: (() => { let id = 0; return () => `id-${++id}`; })()
+  });
+  assert.ok(week.days.flatMap(day => day.meals).every(meal => meal.recipeId === 'legacy'));
+  const emptySlotsWeek = generateWeek([mealSlotRecipe('empty-slots', [])], {
+    babyId: 'b1', stage: 'stage4', startDate: '2026-08-11', mealTypes: ['dinner'],
+    random: () => 0, createId: () => crypto.randomUUID()
+  });
+  assert.ok(emptySlotsWeek.days.flatMap(day => day.meals).every(meal => meal.recipeId === 'empty-slots'));
+});
+
+test('meal slot filtering never bypasses stage or exclusions', () => {
+  const catalog = [
+    mealSlotRecipe('excluded-breakfast', ['早餐'], { ingredients: ['牛肉'] }),
+    mealSlotRecipe('wrong-stage-breakfast', ['早餐'], { stage: 'stage3' }),
+    mealSlotRecipe('safe-breakfast', ['早餐'], { ingredients: ['鸡肉'] })
+  ];
+  const week = generateWeek(catalog, {
+    babyId: 'b1', stage: 'stage4', startDate: '2026-08-11', mealTypes: ['breakfast'],
+    excluded: ['牛肉'], random: () => 0, createId: () => crypto.randomUUID()
+  });
+  assert.ok(week.days.flatMap(day => day.meals).every(meal => meal.recipeId === 'safe-breakfast'));
+});
+
+test('same-day meals prefer different groups when safe candidates exist', () => {
+  const catalog = [
+    mealSlotRecipe('breakfast', ['早餐'], { group: 'grain' }),
+    mealSlotRecipe('lunch-grain', ['午餐'], { group: 'grain' }),
+    mealSlotRecipe('lunch-protein', ['午餐'], { group: 'protein' }),
+    mealSlotRecipe('dinner-grain', ['晚餐'], { group: 'grain' }),
+    mealSlotRecipe('dinner-veg', ['晚餐'], { group: 'vegetable' })
+  ];
+  const week = generateWeek(catalog, {
+    babyId: 'b1', stage: 'stage4', startDate: '2026-08-11', random: () => 0,
+    createId: (() => { let id = 0; return () => `id-${++id}`; })()
+  });
+  assert.equal(new Set(week.days[0].meals.map(meal => meal.group)).size, 3);
+});
+
+test('replacement preserves the target meal type and its safety rules', () => {
+  const catalog = [
+    mealSlotRecipe('breakfast-1', ['早餐']),
+    mealSlotRecipe('breakfast-2', ['早餐']),
+    mealSlotRecipe('lunch', ['午餐'])
+  ];
+  const week = generateWeek(catalog, {
+    babyId: 'b1', stage: 'stage4', startDate: '2026-08-11', mealTypes: ['breakfast'],
+    random: () => 0, createId: (() => { let id = 0; return () => `id-${++id}`; })()
+  });
+  const target = week.days[0].meals[0];
+  const changed = replaceMeal(week, target.id, catalog, { stage: 'stage4', random: () => .99 });
+  assert.equal(changed.days[0].meals[0].mealType, 'breakfast');
+  assert.equal(changed.days[0].meals[0].recipeId, 'breakfast-2');
+});
+
+test('explicit legacy mealCount maps to the first default meal types', () => {
+  const catalog = [
+    mealSlotRecipe('breakfast', ['早餐']),
+    mealSlotRecipe('lunch', ['午餐']),
+    mealSlotRecipe('dinner', ['晚餐'])
+  ];
+  const week = generateWeek(catalog, {
+    babyId: 'b1', stage: 'stage4', startDate: '2026-08-11', mealCount: 2,
+    random: () => 0, createId: (() => { let id = 0; return () => `id-${++id}`; })()
+  });
+  assert.deepEqual(week.days[0].meals.map(meal => meal.mealType), ['breakfast', 'lunch']);
+});
+
+test('weekly generation does not mutate inputs', () => {
+  const catalog = [
+    mealSlotRecipe('breakfast', ['早餐']),
+    mealSlotRecipe('lunch', ['午餐']),
+    mealSlotRecipe('dinner', ['晚餐'])
+  ];
+  const options = {
+    babyId: 'b1', stage: 'stage4', startDate: '2026-08-11',
+    excluded: [], favorites: [], disliked: [], random: () => 0,
+    createId: (() => { let id = 0; return () => `id-${++id}`; })()
+  };
+  const catalogBefore = structuredClone(catalog);
+  const optionListsBefore = structuredClone({ excluded: options.excluded, favorites: options.favorites, disliked: options.disliked });
+  generateWeek(catalog, options);
+  assert.deepEqual(catalog, catalogBefore);
+  assert.deepEqual({ excluded: options.excluded, favorites: options.favorites, disliked: options.disliked }, optionListsBefore);
+});
 
 const rotationRecipe = (id, group, texture, cookingMethod, extra = {}) => ({
   id, stage: 'stage4', name: `recipe-${id}`, group, texture, cookingMethod,
