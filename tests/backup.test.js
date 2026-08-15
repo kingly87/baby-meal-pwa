@@ -55,6 +55,19 @@ test('backup reports malformed menu entries as weeklyMenus validation errors', (
   }
 });
 
+test('backup rejects impossible menu dates, invalid startDate and blank meal identity', () => {
+  const base={app:'baby-growth-assistant',schemaVersion:1,data:{babies:[{id:'b1',name:'Baby',stage:'stage4'}]}};
+  const invalidMenus=[
+    {id:'w1',babyId:'b1',startDate:'2026-02-30',days:[]},
+    {id:'w1',babyId:'b1',startDate:'2026-02-23',days:[{date:'2026-02-30',meals:[]}]},
+    {id:'w1',babyId:'b1',startDate:'2026-02-23',days:[{date:'2026-02-23',meals:[{id:' ',name:'Meal',status:'planned'}]}]},
+    {id:'w1',babyId:'b1',startDate:'2026-02-23',days:[{date:'2026-02-23',meals:[{id:'m1',name:' ',status:'planned'}]}]}
+  ];
+  for(const weeklyMenu of invalidMenus) {
+    assert.throws(()=>previewBackup(JSON.stringify({...base,data:{...base.data,weeklyMenus:[weeklyMenu]}})),/weeklyMenus/);
+  }
+});
+
 test('backup accepts legacy meals without mealType and all supported meal types', () => {
   const base={app:'baby-growth-assistant',schemaVersion:1,data:{babies:[{id:'b1',name:'Baby',stage:'stage4'}]}};
   const meals=[
@@ -63,7 +76,7 @@ test('backup accepts legacy meals without mealType and all supported meal types'
     {id:'m3',name:'Lunch',status:'eaten',mealType:'lunch'},
     {id:'m4',name:'Dinner',status:'skipped',mealType:'dinner'}
   ];
-  const result=previewBackup(JSON.stringify({...base,data:{...base.data,weeklyMenus:[{id:'w1',babyId:'b1',days:[{date:'2026-08-15',meals}]}]}}));
+  const result=previewBackup(JSON.stringify({...base,data:{...base.data,weeklyMenus:[{id:'w1',babyId:'b1',startDate:'2026-08-10',days:[{date:'2026-08-15',meals}]}]}}));
   assert.equal(result.babyCount,1);
   assert.equal(result.recordCount,2);
 });
@@ -71,7 +84,7 @@ test('backup accepts legacy meals without mealType and all supported meal types'
 test('backup rejects an unsupported explicit mealType', () => {
   const base={app:'baby-growth-assistant',schemaVersion:1,data:{babies:[{id:'b1',name:'Baby',stage:'stage4'}]}};
   for(const mealType of ['snack',null]) {
-    const weeklyMenus=[{id:'w1',babyId:'b1',days:[{date:'2026-08-15',meals:[{id:'m1',name:'Unsupported',status:'planned',mealType}]}]}];
+    const weeklyMenus=[{id:'w1',babyId:'b1',startDate:'2026-08-10',days:[{date:'2026-08-15',meals:[{id:'m1',name:'Unsupported',status:'planned',mealType}]}]}];
     assert.throws(()=>previewBackup(JSON.stringify({...base,data:{...base.data,weeklyMenus}})),/weeklyMenus/);
   }
 });

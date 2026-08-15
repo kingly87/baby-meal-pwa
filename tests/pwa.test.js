@@ -46,6 +46,34 @@ test('service worker activation deletes only obsolete caches owned by this appli
   assert.deepEqual(deleted,['baby-growth-v1-20260720-r26']);
 });
 
+test('service worker reads only the current application cache', async () => {
+  const listeners={};
+  const matched=[];
+  let globalReads=0;
+  const activeFallback={source:'active-cache'};
+  const networkResponse={ok:true,clone(){return this},source:'network'};
+  const activeCache={
+    match:async request=>{matched.push(request); return request==='./index.html'?activeFallback:undefined},
+    put:async()=>{}
+  };
+  const self={
+    addEventListener(type,listener){listeners[type]=listener},
+    clients:{},location:{origin:'https://example.test'}
+  };
+  const caches={
+    open:async name=>{assert.equal(name,'baby-growth-v1-20260720-r27'); return activeCache},
+    match:async()=>{globalReads++; return {source:'other-cache'}}
+  };
+  const fetch=async request=>{if(request.mode==='navigate')throw new Error('offline'); return networkResponse};
+  vm.runInNewContext(await readFile('service-worker.js','utf8'),{self,caches,fetch,URL});
+  const request=mode=>({method:'GET',mode,url:`https://example.test/${mode}`});
+  const runFetch=req=>new Promise((resolve,reject)=>listeners.fetch({request:req,respondWith(promise){promise.then(resolve,reject)}}));
+  assert.equal(await runFetch(request('cors')),networkResponse);
+  assert.equal(await runFetch(request('navigate')),activeFallback);
+  assert.equal(globalReads,0);
+  assert.equal(matched.length,2);
+});
+
 test('application asks before activating a waiting service worker update', async () => {
   const app=await readFile('src/app.js','utf8');
   for(const token of ['registration.waiting','updatefound','controllerchange','SKIP_WAITING']) assert.ok(app.includes(token),token);
