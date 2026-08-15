@@ -148,6 +148,46 @@ test('replacement preserves the target meal type and its safety rules', () => {
   assert.equal(changed.days[0].meals[0].recipeId, 'breakfast-2');
 });
 
+test('replacement infers and upgrades legacy two-meal lunch and dinner slots', () => {
+  const catalog = [
+    mealSlotRecipe('current-lunch', ['午餐']),
+    mealSlotRecipe('current-dinner', ['晚餐']),
+    mealSlotRecipe('breakfast-only', ['早餐']),
+    mealSlotRecipe('new-lunch', ['午餐']),
+    mealSlotRecipe('new-dinner', ['晚餐'])
+  ];
+  const week = { days: [{ meals: [
+    { id: 'legacy-lunch', recipeId: 'current-lunch' },
+    { id: 'legacy-dinner', recipeId: 'current-dinner' }
+  ] }] };
+  const lunchChanged = replaceMeal(week, 'legacy-lunch', catalog, { stage: 'stage4', random: () => 0 });
+  const dinnerChanged = replaceMeal(week, 'legacy-dinner', catalog, { stage: 'stage4', random: () => 0 });
+  assert.equal(lunchChanged.days[0].meals[0].mealType, 'lunch');
+  assert.equal(lunchChanged.days[0].meals[0].recipeId, 'new-lunch');
+  assert.equal(dinnerChanged.days[0].meals[1].mealType, 'dinner');
+  assert.equal(dinnerChanged.days[0].meals[1].recipeId, 'new-dinner');
+});
+
+test('replacement infers a legacy three-meal slot but preserves an explicit unknown meal type', () => {
+  const catalog = [
+    mealSlotRecipe('current', ['早餐']),
+    mealSlotRecipe('new-breakfast', ['早餐']),
+    mealSlotRecipe('lunch-only', ['午餐'])
+  ];
+  const legacyWeek = { days: [{ meals: [
+    { id: 'target', recipeId: 'current' },
+    { id: 'lunch' },
+    { id: 'dinner' }
+  ] }] };
+  const upgraded = replaceMeal(legacyWeek, 'target', catalog, { stage: 'stage4', random: () => 0 });
+  assert.equal(upgraded.days[0].meals[0].mealType, 'breakfast');
+  assert.equal(upgraded.days[0].meals[0].recipeId, 'new-breakfast');
+
+  const unknownWeek = { days: [{ meals: [{ id: 'unknown', recipeId: 'current', mealType: 'snack' }] }] };
+  const preserved = replaceMeal(unknownWeek, 'unknown', catalog, { stage: 'stage4', random: () => 0 });
+  assert.equal(preserved.days[0].meals[0].mealType, 'snack');
+});
+
 test('explicit legacy mealCount maps one and two meals to lunch and dinner', () => {
   const catalog = [
     mealSlotRecipe('breakfast', ['早餐']),

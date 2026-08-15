@@ -27,6 +27,11 @@ function resolveMealTypes(options) {
   return DEFAULT_MEAL_TYPES;
 }
 
+function legacyMealType(meals, index) {
+  if (meals.length === 2) return ['lunch', 'dinner'][index];
+  if (meals.length === 3) return DEFAULT_MEAL_TYPES[index];
+}
+
 function weightedPick(list, options) {
   const weighted = list.map(recipe => ({ recipe, weight: recipeWeight(recipe, options) }));
   const total = weighted.reduce((sum, item) => sum + item.weight, 0);
@@ -94,9 +99,12 @@ export function replaceMeal(week, mealId, catalog, options) {
   const allMeals = week.days.flatMap(day => day.meals);
   const targetIndex = allMeals.findIndex(meal => meal.id === mealId);
   if (targetIndex < 0) throw new Error('找不到要替换的餐次');
+  const targetDay = week.days.find(day => day.meals.some(meal => meal.id === mealId));
+  const targetMealIndex = targetDay.meals.findIndex(meal => meal.id === mealId);
+  const targetMeal = targetDay.meals[targetMealIndex];
   const currentRecipeId = allMeals[targetIndex]?.recipeId;
   let candidates = safeCandidates(catalog, options).filter(recipe => recipe.id !== currentRecipeId);
-  const mealType = allMeals[targetIndex]?.mealType;
+  const mealType = targetMeal.mealType ?? legacyMealType(targetDay.meals, targetMealIndex);
   if (mealType) candidates = candidatesForMealType(candidates, mealType);
   if (!candidates.length) throw new Error('没有其他安全食谱可以替换');
   const recentShapes = allMeals.slice(Math.max(0, targetIndex - 2), Math.max(0, targetIndex)).map(meal => {
@@ -109,7 +117,7 @@ export function replaceMeal(week, mealId, catalog, options) {
   });
   candidates = preferShapeVariety(candidates, recentShapes);
   const recipe = weightedPick(candidates, { ...options, groupCounts: {}, random: options.random || Math.random });
-  return { ...week, days: week.days.map(day => ({ ...day, meals: day.meals.map(meal => meal.id === mealId ? { ...meal, recipeId: recipe.id, name: recipe.name, group: recipe.group, staple: recipe.staple, texture: recipe.texture, cookingMethod: recipe.cookingMethod, updatedAt: new Date().toISOString() } : { ...meal }) })), updatedAt: new Date().toISOString() };
+  return { ...week, days: week.days.map(day => ({ ...day, meals: day.meals.map(meal => meal.id === mealId ? { ...meal, ...(mealType != null ? { mealType } : {}), recipeId: recipe.id, name: recipe.name, group: recipe.group, staple: recipe.staple, texture: recipe.texture, cookingMethod: recipe.cookingMethod, updatedAt: new Date().toISOString() } : { ...meal }) })), updatedAt: new Date().toISOString() };
 }
 
 export function setMealStatus(week, mealId, status) { if (!['planned','eaten','skipped'].includes(status)) throw new Error('无效餐次状态'); return { ...week, days: week.days.map(day => ({ ...day, meals: day.meals.map(meal => meal.id === mealId ? { ...meal, status, updatedAt: new Date().toISOString() } : { ...meal }) })) }; }
