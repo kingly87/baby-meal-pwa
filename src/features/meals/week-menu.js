@@ -83,7 +83,15 @@ export function findMenuForWeek(menus, { babyId, date } = {}) {
   return menu ? normalizeMenu(menu) : null;
 }
 
-export async function saveCurrentWeek(repository, menus, generated, nowISO) {
+function stableMenuOrder(left, right) {
+  const leftCreatedAt = typeof left.createdAt === 'string' && left.createdAt ? left.createdAt : '\uffff';
+  const rightCreatedAt = typeof right.createdAt === 'string' && right.createdAt ? right.createdAt : '\uffff';
+  const byCreatedAt = leftCreatedAt.localeCompare(rightCreatedAt);
+  if (byCreatedAt) return byCreatedAt;
+  return String(left.id ?? '').localeCompare(String(right.id ?? ''));
+}
+
+export async function saveCurrentWeek(repository, _menus, generated, nowISO) {
   if (typeof generated?.babyId !== 'string' || !generated.babyId.trim()) {
     throw new Error('generated.babyId must be a non-empty string');
   }
@@ -93,15 +101,27 @@ export async function saveCurrentWeek(repository, menus, generated, nowISO) {
     throw new Error('generated.startDate must be a valid local date');
   }
 
-  const existing = findMenuForWeek(menus, {
-    babyId: generated.babyId,
-    date: generated.startDate
+  const timestamp = nowISO ?? new Date().toISOString();
+  const targetWeek = weekStart(generated.startDate);
+  return repository.transaction(['weeklyMenus'], async tx => {
+    const currentMenus = await tx.list('weeklyMenus', { babyId: generated.babyId });
+    const sameWeek = currentMenus.filter(menu => {
+      try {
+        return weekStart(menu.startDate ?? menu.days?.[0]?.date) === targetWeek;
+      } catch {
+        return false;
+      }
+    }).sort(stableMenuOrder);
+    const keeper = sameWeek[0];
+    const value = structuredClone(generated);
+    value.id = keeper?.id ?? value.id;
+    value.createdAt = keeper?.createdAt ?? value.createdAt ?? timestamp;
+    value.updatedAt = timestamp;
+
+    const saved = await tx.put('weeklyMenus', value);
+    for (const duplicate of sameWeek.slice(1)) {
+      await tx.delete('weeklyMenus', duplicate.id);
+    }
+    return saved;
   });
-  const value = structuredClone(generated);
-  if (existing) {
-    value.id = existing.id;
-    value.createdAt = existing.createdAt;
-    value.updatedAt = nowISO ?? new Date().toISOString();
-  }
-  return repository.put('weeklyMenus', value);
 }
