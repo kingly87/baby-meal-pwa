@@ -1,4 +1,5 @@
 import{weekStart}from'./week-menu.js';
+import{replaceMeal}from'./planner.js';
 
 export function historyMenus(menus,{babyId,date}={}){
   let currentWeek;try{currentWeek=weekStart(date)}catch{return[]}
@@ -25,6 +26,11 @@ export function updateMenuAtomically({repository,menuId,babyId,mutate}){
 export async function runMenuMutation({repository,menuId,babyId,controls=[],prepare=async()=>undefined,mutate,refresh,notify}){
   controls.forEach(control=>{control.disabled=true});
   try{const prepared=await prepare(),updated=await updateMenuAtomically({repository,menuId,babyId,mutate:value=>mutate(value,prepared)});await refresh();return updated}catch(error){notify(error.message);return null}finally{controls.forEach(control=>{control.disabled=false})}
+}
+
+export function runReplaceMenuMutation({repository,store,menuId,mealId,catalog,controls=[],refresh,notify}){
+  const context={babyId:store.activeBabyId,stage:store.activeBaby?.stage};
+  return runMenuMutation({repository,menuId,babyId:context.babyId,controls,prepare:async()=>await repository.get('foodPreferences',context.babyId)||{},mutate:(menu,prefs)=>replaceMeal(menu,mealId,catalog,{stage:context.stage,excluded:prefs.excluded||[],favorites:prefs.favorites||[],disliked:prefs.disliked||[]}),refresh,notify});
 }
 
 export function resetMenuBrowserForBoundary(browser){browser.reset();return browser.value()}

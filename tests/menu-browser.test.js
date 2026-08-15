@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createMenuBrowser, historyMenus, updateMenuAtomically, runMenuMutation, resetMenuBrowserForBoundary } from '../src/features/meals/menu-browser.js';
+import { createMenuBrowser, historyMenus, updateMenuAtomically, runMenuMutation, runReplaceMenuMutation, resetMenuBrowserForBoundary } from '../src/features/meals/menu-browser.js';
 import { MemoryRepository } from '../src/db.js';
 
 test('menu browser isolates history editing and resets it when selection changes',()=>{
@@ -64,6 +64,20 @@ test('menu mutation locks controls before asynchronous preparation',async()=>{
   const repo=new MemoryRepository({weeklyMenus:[menu()]}),controls=[{disabled:false}],seen=[];
   await runMenuMutation({repository:repo,menuId:'w1',babyId:'b1',controls,prepare:async()=>{seen.push(controls[0].disabled);return'eaten'},mutate:(value,status)=>({...value,days:value.days.map(day=>({...day,meals:day.meals.map((meal,index)=>index?meal:{...meal,status})}))}),refresh:async()=>{},notify:()=>{}});
   assert.deepEqual(seen,[true]);assert.equal(controls[0].disabled,false);
+});
+
+test('queued replacement keeps the clicked baby and stage after active baby switches',async()=>{
+  const oldMenu={id:'old-menu',babyId:'old-baby',startDate:'2026-08-03',days:[{date:'2026-08-03',meals:[{id:'m1',recipeId:'old-recipe',mealType:'lunch',status:'planned'}]}]},newMenu={id:'new-menu',babyId:'new-baby',startDate:'2026-08-03',days:[]};
+  const repo=new MemoryRepository({weeklyMenus:[oldMenu,newMenu],foodPreferences:[{id:'old-baby',babyId:'old-baby',excluded:[],favorites:[],disliked:[]}]});
+  const catalog=[{id:'old-recipe',stage:'old-stage',mealSlots:['午餐'],name:'旧餐'},{id:'old-choice',stage:'old-stage',mealSlots:['午餐'],name:'旧宝宝候选'},{id:'new-choice',stage:'new-stage',mealSlots:['午餐'],name:'新宝宝候选'}];
+  const store={activeBabyId:'old-baby',activeBaby:{id:'old-baby',stage:'old-stage'}};
+  let release;const gate=new Promise(resolve=>{release=resolve});
+  const blocker=updateMenuAtomically({repository:repo,menuId:'old-menu',babyId:'old-baby',mutate:async value=>{await gate;return value}});
+  const replacement=runReplaceMenuMutation({repository:repo,store,menuId:'old-menu',mealId:'m1',catalog,controls:[],refresh:async()=>{},notify:()=>{}});
+  store.activeBabyId='new-baby';store.activeBaby={id:'new-baby',stage:'new-stage'};
+  release();await blocker;await replacement;
+  assert.equal((await repo.get('weeklyMenus','old-menu')).days[0].meals[0].recipeId,'old-choice');
+  assert.deepEqual(await repo.get('weeklyMenus','new-menu'),newMenu);
 });
 
 for(const boundary of ['baby-switch','backup-import','baby-delete'])test(`${boundary} resets real menu browser state`,()=>{
