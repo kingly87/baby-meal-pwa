@@ -6,6 +6,7 @@ import { formatTimelineDate } from '../src/ui/render.js';
 import { onboardingView } from '../src/ui/onboarding.js';
 import { mealsView, recipeMatchesFilters } from '../src/ui/meals.js';
 import { growthView, chartSvg } from '../src/ui/growth.js';
+import { settingsView } from '../src/ui/settings.js';
 import { recordsView } from '../src/ui/records.js';
 import { formatDateTimeLocal } from '../src/app.js';
 import { openActionDialog, guardedDialogClose, runDialogSubmit } from '../src/ui/dialogs.js';
@@ -450,6 +451,27 @@ test('sleep dialogs choose a type and completed flows share schedule recalculati
 test('growth timeline exposes filterable event types', () => {
   const html=growthView({timeline:[{type:'sleep',date:'2026-07-20',title:'睡眠'}]});
   assert.match(html,/data-type="sleep"/); assert.match(html,/value="sleep"/); assert.match(html,/value="task"/);
+});
+
+test('settings page exposes a shrinkable mobile-safe content scope',async()=>{
+  const html=settingsView({baby:{id:'baby-1'},babies:[{id:'baby-1',name:'一段很长很长的宝宝名字用于验证窄屏'}]});
+  const css=await readFile('assets/styles/app.css','utf8');
+  assert.match(html,/class="page-stack settings-page"/);
+  assert.match(css,/\.app-shell\{[^}]*width:min\(100%,760px\)[^}]*\}/);
+  assert.match(css,/\.settings-page\{[^}]*min-width:0[^}]*overflow-wrap:anywhere[^}]*\}/);
+  assert.match(css,/\.settings-page[^}]* select[^}]*max-width:100%[^}]*min-width:0[^}]*\}/);
+  assert.match(css,/\.settings-page \.button-row>\*\{[^}]*min-width:0[^}]*max-width:100%[^}]*white-space:normal[^}]*\}/);
+  assert.match(css,/\.settings-page \.file-button\{[^}]*min-height:44px[^}]*\}/);
+  assert.doesNotMatch(await readFile('index.html','utf8'),/user-scalable\s*=\s*no|maximum-scale\s*=\s*1/i);
+});
+
+test('complete timeline keeps its native filter and scrolls inside a touch region',async()=>{
+  const html=growthView({timeline:Array.from({length:8},(_,index)=>({type:'sleep',date:`2026-07-${20-index}`,title:`睡眠记录 ${index}`}))});
+  const css=await readFile('assets/styles/app.css','utf8');
+  assert.match(html,/<select id="timeline-filter">[\s\S]*<option value="water">/);
+  assert.match(html,/class="timeline timeline-scroll"/);
+  assert.match(css,/#timeline-filter\{[^}]*min-height:44px[^}]*max-width:100%[^}]*min-width:0[^}]*touch-action:manipulation[^}]*\}/);
+  assert.match(css,/\.timeline-scroll\{[^}]*max-height:[^;}]+[^}]*overflow-y:auto[^}]*overflow-x:hidden[^}]*-webkit-overflow-scrolling:touch[^}]*overscroll-behavior:contain[^}]*\}/);
 });
 
 test('weight entry accepts two decimal kilograms while height keeps decimal precision', async () => {
