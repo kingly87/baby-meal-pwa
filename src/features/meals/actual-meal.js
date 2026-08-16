@@ -77,9 +77,19 @@ export function saveActualMeal(menu, mealId, input, now = new Date().toISOString
   if (!occurredAt) {
     throw new Error('实际用餐时间无效');
   }
-  const existingCreatedAt = targetMeal.actualMeal?.createdAt;
-  if (existingCreatedAt !== undefined && !parseIsoTimestamp(existingCreatedAt)) {
-    throw new Error('实际餐食创建时间无效');
+  const hasExistingActualMeal = Object.hasOwn(targetMeal, 'actualMeal');
+  const existingActualMeal = targetMeal.actualMeal;
+  if (
+    hasExistingActualMeal
+    && (
+      !existingActualMeal
+      || typeof existingActualMeal !== 'object'
+      || Array.isArray(existingActualMeal)
+      || !Object.hasOwn(existingActualMeal, 'createdAt')
+      || !parseIsoTimestamp(existingActualMeal.createdAt)
+    )
+  ) {
+    throw new Error('已有实际餐食记录无效：实际餐食创建时间无效');
   }
 
   return updateMeal(menu, mealId, now, meal => ({
@@ -90,7 +100,7 @@ export function saveActualMeal(menu, mealId, input, now = new Date().toISOString
       occurredAt: occurredAt.toISOString(),
       amount: typeof input.amount === 'string' ? input.amount.trim() : '',
       note: typeof input.note === 'string' ? input.note.trim() : '',
-      createdAt: meal.actualMeal?.createdAt || now,
+      createdAt: hasExistingActualMeal ? existingActualMeal.createdAt : now,
       updatedAt: now
     }
   }));

@@ -159,6 +159,38 @@ test('saveActualMeal rejects an invalid existing actual meal createdAt', () => {
   );
 });
 
+test('saveActualMeal rejects every malformed existing actualMeal field instead of inventing createdAt', () => {
+  const malformedValues = [
+    {},
+    null,
+    'legacy-string',
+    42,
+    [],
+    undefined
+  ];
+
+  for (const actualMeal of malformedValues) {
+    const source = menu();
+    source.days[0].meals[0].actualMeal = actualMeal;
+    const before = structuredClone(source);
+
+    assert.throws(
+      () => saveActualMeal(source, 'meal-1', { name: '新记录', occurredAt: NOW }, NOW),
+      /已有实际餐食记录无效/
+    );
+    assert.deepEqual(source, before);
+  }
+});
+
+test('removeActualMeal can remove malformed existing actualMeal fields for recovery', () => {
+  for (const actualMeal of [null, 'legacy-string', 42, [], {}]) {
+    const source = menu();
+    source.days[0].meals[0].actualMeal = actualMeal;
+    const removed = removeActualMeal(source, 'meal-1', NOW);
+    assert.equal(Object.hasOwn(removed.days[0].meals[0], 'actualMeal'), false);
+  }
+});
+
 test('actual meal operations reject malformed menu structures with domain errors', () => {
   const invalidMenus = [
     null,
