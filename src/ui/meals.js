@@ -23,8 +23,9 @@ function actualMealDate(value){
 
 function actualMealState(meal){
   if(!Object.hasOwn(meal,'actualMeal'))return{kind:'absent'};
-  const actualMeal=meal.actualMeal,date=actualMeal&&typeof actualMeal==='object'&&!Array.isArray(actualMeal)?actualMealDate(actualMeal.occurredAt):null;
-  if(!actualMeal||typeof actualMeal!=='object'||Array.isArray(actualMeal)||typeof actualMeal.name!=='string'||!actualMeal.name.trim()||!date)return{kind:'damaged'};
+  const actualMeal=meal.actualMeal,isObject=actualMeal&&typeof actualMeal==='object'&&!Array.isArray(actualMeal);
+  const date=isObject?actualMealDate(actualMeal.occurredAt):null,createdAt=isObject&&Object.hasOwn(actualMeal,'createdAt')?actualMealDate(actualMeal.createdAt):null;
+  if(!isObject||typeof actualMeal.name!=='string'||!actualMeal.name.trim()||!date||!createdAt)return{kind:'damaged'};
   return{kind:'valid',actualMeal,date};
 }
 

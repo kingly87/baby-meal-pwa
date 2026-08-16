@@ -228,8 +228,8 @@ test('history is read only until explicitly editing the selected week',()=>{
 test('meal cards render escaped actual meal details with safe time and optional fields',()=>{
   const hostile='<img src=x onerror=alert(1)>&';
   const week={id:'menu<&',startDate:'2026-08-10',days:[{date:'2026-08-10',meals:[
-    {id:'meal<&',name:'计划粥',actualMeal:{name:hostile,occurredAt:'2026-08-16T01:10:00.000Z',amount:'半碗 <b>&',note:'喜欢 & <script>'}},
-    {id:'legacy',name:'计划面',actualMeal:{name:'苹果',occurredAt:'not-a-date',amount:'',note:''}},
+    {id:'meal<&',name:'计划粥',actualMeal:{name:hostile,occurredAt:'2026-08-16T01:10:00.000Z',createdAt:'2026-08-15T01:00:00.000Z',amount:'半碗 <b>&',note:'喜欢 & <script>'}},
+    {id:'legacy',name:'计划面',actualMeal:{name:'苹果',occurredAt:'not-a-date',createdAt:'2026-08-15T01:00:00.000Z',amount:'',note:''}},
     {id:'legacy-null',name:'计划饭',actualMeal:{name:'香蕉',occurredAt:null}}
   ]}]};
   const html=mealsView({week,weeks:[week],menuBrowser:{mode:'current'}});
@@ -249,7 +249,7 @@ test('meal cards render escaped actual meal details with safe time and optional 
 test('actual meal actions respect editability and retain meal and menu ids',()=>{
   const menu={id:'menu-1',startDate:'2026-08-03',days:[{date:'2026-08-03',meals:[
     {id:'without',name:'粥'},
-    {id:'with',name:'面',actualMeal:{name:'香蕉',occurredAt:'2026-08-03T04:00:00.000Z'}}
+    {id:'with',name:'面',actualMeal:{name:'香蕉',occurredAt:'2026-08-03T04:00:00.000Z',createdAt:'2026-08-03T04:01:00.000Z'}}
   ]}]};
   const editable=mealsView({week:menu,weeks:[menu],menuBrowser:{mode:'current'}});
   assert.match(editable,/data-action="add-actual-meal" data-id="without" data-menu-id="menu-1"/);
@@ -261,18 +261,23 @@ test('actual meal actions respect editability and retain meal and menu ids',()=>
 });
 
 test('damaged own actual meal values stay recoverable without becoming addable records',()=>{
+  const inheritedCreatedAt=Object.create({createdAt:'2026-08-15T01:00:00.000Z'});
+  Object.assign(inheritedCreatedAt,{name:'梨',occurredAt:'2026-08-16T01:10:00.000Z'});
   const damaged=[
     {id:'empty',actualMeal:{}},
-    {id:'number-name',actualMeal:{name:7,occurredAt:'2026-08-16T01:10:00.000Z'}},
-    {id:'blank-name',actualMeal:{name:'   ',occurredAt:'2026-08-16T01:10:00.000Z'}},
-    {id:'bad-time',actualMeal:{name:'苹果',occurredAt:'2026-02-30T01:10:00.000Z'}},
+    {id:'number-name',actualMeal:{name:7,occurredAt:'2026-08-16T01:10:00.000Z',createdAt:'2026-08-15T01:00:00.000Z'}},
+    {id:'blank-name',actualMeal:{name:'   ',occurredAt:'2026-08-16T01:10:00.000Z',createdAt:'2026-08-15T01:00:00.000Z'}},
+    {id:'bad-time',actualMeal:{name:'苹果',occurredAt:'2026-02-30T01:10:00.000Z',createdAt:'2026-08-15T01:00:00.000Z'}},
+    {id:'missing-created',actualMeal:{name:'桃',occurredAt:'2026-08-16T01:10:00.000Z'}},
+    {id:'bad-created',actualMeal:{name:'橙',occurredAt:'2026-08-16T01:10:00.000Z',createdAt:'bad-time'}},
+    {id:'inherited-created',actualMeal:inheritedCreatedAt},
     {id:'null-value',actualMeal:null}
   ].map(meal=>({name:'计划餐',...meal}));
   const menu={id:'damaged-menu',startDate:'2026-08-10',days:[{date:'2026-08-10',meals:damaged}]};
   const editable=mealsView({week:menu,weeks:[menu],menuBrowser:{mode:'current'}});
   assert.equal((editable.match(/实际进食记录已损坏/g)||[]).length,damaged.length);
-  assert.doesNotMatch(editable,/<time[^>]*>[^<]*时间未知|data-action="add-actual-meal"[^>]*data-id="(?:empty|number-name|blank-name|bad-time|null-value)"/);
-  assert.doesNotMatch(editable,/data-action="edit-actual-meal"[^>]*data-id="(?:empty|number-name|blank-name|bad-time|null-value)"/);
+  assert.doesNotMatch(editable,/<time[^>]*>[^<]*时间未知|data-action="add-actual-meal"[^>]*data-id="(?:empty|number-name|blank-name|bad-time|missing-created|bad-created|inherited-created|null-value)"/);
+  assert.doesNotMatch(editable,/data-action="edit-actual-meal"[^>]*data-id="(?:empty|number-name|blank-name|bad-time|missing-created|bad-created|inherited-created|null-value)"/);
   for(const {id} of damaged)assert.match(editable,new RegExp(`class="danger" data-action="delete-actual-meal" data-id="${id}" data-menu-id="damaged-menu"`));
   const readonly=mealsView({week:null,weeks:[menu],menuBrowser:{mode:'history',selectedId:'damaged-menu',editingHistory:false}});
   assert.equal((readonly.match(/实际进食记录已损坏/g)||[]).length,damaged.length);
@@ -284,6 +289,8 @@ test('actual meal styles contain long content and preserve mobile tap targets',a
   assert.match(css,/\.actual-meal-summary\s*\{[^}]*min-width:0[^}]*overflow-wrap:anywhere/s);
   assert.match(css,/\.actual-meal-(?:title|amount|note)[^}]*overflow-wrap:anywhere/s);
   assert.match(css,/\.actual-meal-actions\s+button\s*\{[^}]*min-height:44px/s);
+  assert.match(css,/\.week-grid\s+\.meal-row\s+button\.danger\s*\{[^}]*background:#f4ded8[^}]*color:var\(--danger\)[^}]*border:/s);
+  assert.ok(css.lastIndexOf('.week-grid .meal-row button.danger')>css.indexOf('.meal-row button{'));
   assert.match(css,/@media\(max-width:380px\)[\s\S]*\.actual-meal-actions[^}]*minmax\(0,1fr\)/s);
 });
 
