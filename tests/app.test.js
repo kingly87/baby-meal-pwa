@@ -52,6 +52,15 @@ test('actual meal binding captures click-time baby, prefills snapshot and deleti
   await del.onclick();assert.equal(transactions,0);
 });
 
+test('actual meal dialog labels precisely target four stable unique field ids',async()=>{
+  const add={dataset:{action:'add-actual-meal',menuId:'w1',id:'m1'}},document={querySelectorAll:()=>[add]},week={id:'w1',babyId:'b1',days:[{date:'2026-08-03',meals:[{id:'m1',status:'planned'}]}]},repo=new MemoryRepository({weeklyMenus:[week]}),store={activeBabyId:'b1',weeks:[week]};let body='';
+  bindActualMealActions(document,{repository:repo,store,openDialog:async options=>{body=options.body;return null},controlsForMenu:()=>[add],refresh:async()=>{},notify:()=>{},now:()=>new Date(2026,7,16,9,7)});
+  await add.onclick();
+  const fields=[['actual-meal-name','name','input'],['actual-meal-occurred-at','occurredAt','input'],['actual-meal-amount','amount','input'],['actual-meal-note','note','textarea']];
+  for(const[id,name,tag]of fields){assert.match(body,new RegExp(`<label for="${id}">[^<]+</label>`));assert.match(body,new RegExp(`<${tag}[^>]*id="${id}"[^>]*name="${name}"`))}
+  assert.equal(new Set([...body.matchAll(/\sid="([^"]+)"/g)].map(match=>match[1])).size,fields.length);
+});
+
 test('growth view props use already loaded data and isolate the active baby',()=>{
   const allData={growthMeasurements:[{id:'a',babyId:'b1'},{id:'b',babyId:'b2'}],toothRecords:[{id:'t1',babyId:'b1'},{id:'t2',babyId:'b2'}]};
   assert.deepEqual(growthViewProps(allData,'b2'),{measurements:[allData.growthMeasurements[1]],teeth:[allData.toothRecords[1]]});
