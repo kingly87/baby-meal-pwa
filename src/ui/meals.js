@@ -5,26 +5,46 @@ import{menuRange,normalizeMenu}from'../features/meals/week-menu.js';
 import{historyMenus}from'../features/meals/menu-browser.js';
 
 const mealTypeLabels={breakfast:'早餐',lunch:'午餐',dinner:'晚餐'};
+const actualMealIso=/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.(\d+))?(Z|[+-](\d{2}):(\d{2}))$/;
 
-function actualMealTime(value){
-  if(typeof value!=='string'||!value.trim())return'时间未知';
+function actualMealDate(value){
+  if(typeof value!=='string')return null;
+  const match=actualMealIso.exec(value);
+  if(!match)return null;
+  const[,year,month,day,hour,minute,second,fraction='',zone,offsetHour,offsetMinute]=match;
+  if(zone!=='Z'&&(Number(offsetHour)>23||Number(offsetMinute)>59))return null;
+  const parts=[year,month,day,hour,minute,second].map(Number),local=new Date(0);
+  local.setUTCFullYear(parts[0],parts[1]-1,parts[2]);
+  local.setUTCHours(parts[3],parts[4],parts[5],Number(fraction.slice(0,3).padEnd(3,'0')));
+  if(local.getUTCFullYear()!==parts[0]||local.getUTCMonth()!==parts[1]-1||local.getUTCDate()!==parts[2]||local.getUTCHours()!==parts[3]||local.getUTCMinutes()!==parts[4]||local.getUTCSeconds()!==parts[5])return null;
   const date=new Date(value);
-  return Number.isNaN(date.getTime())?'时间未知':date.toLocaleString('zh-CN',{year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'});
+  return Number.isNaN(date.getTime())?null:date;
 }
 
-function actualMealSummary(actualMeal){
-  if(!actualMeal||typeof actualMeal!=='object'||Array.isArray(actualMeal))return'';
+function actualMealState(meal){
+  if(!Object.hasOwn(meal,'actualMeal'))return{kind:'absent'};
+  const actualMeal=meal.actualMeal,date=actualMeal&&typeof actualMeal==='object'&&!Array.isArray(actualMeal)?actualMealDate(actualMeal.occurredAt):null;
+  if(!actualMeal||typeof actualMeal!=='object'||Array.isArray(actualMeal)||typeof actualMeal.name!=='string'||!actualMeal.name.trim()||!date)return{kind:'damaged'};
+  return{kind:'valid',actualMeal,date};
+}
+
+function actualMealSummary(state){
+  if(state.kind==='absent')return'';
+  if(state.kind==='damaged')return'<section class="actual-meal-summary" aria-label="实际进食记录"><strong class="actual-meal-title">实际进食记录已损坏</strong><span>时间未知</span></section>';
+  const{actualMeal,date}=state;
   const amount=typeof actualMeal.amount==='string'&&actualMeal.amount.trim()?`<span class="actual-meal-amount">份量：${esc(actualMeal.amount)}</span>`:'';
   const note=typeof actualMeal.note==='string'&&actualMeal.note.trim()?`<span class="actual-meal-note">备注：${esc(actualMeal.note)}</span>`:'';
-  return`<section class="actual-meal-summary" aria-label="实际进食记录"><strong class="actual-meal-title">实际吃了：${esc(actualMeal.name??'')}</strong><time>${esc(actualMealTime(actualMeal.occurredAt))}</time>${amount}${note}</section>`;
+  const local=date.toLocaleString('zh-CN',{year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'});
+  return`<section class="actual-meal-summary" aria-label="实际进食记录"><strong class="actual-meal-title">实际吃了：${esc(actualMeal.name.trim())}</strong><time datetime="${esc(date.toISOString())}">${esc(local)}</time>${amount}${note}</section>`;
 }
 
 function weeklyMeal(meal,recipe,{editable=true,menuId}={}){
   const item=presentMeal(meal,recipe);
-  const hasActualMeal=Boolean(meal.actualMeal&&typeof meal.actualMeal==='object'&&!Array.isArray(meal.actualMeal));
-  const actualActions=editable?(hasActualMeal?`<div class="actual-meal-actions"><button data-action="edit-actual-meal" data-id="${esc(meal.id)}" data-menu-id="${esc(menuId)}">编辑实际进食</button><button data-action="delete-actual-meal" data-id="${esc(meal.id)}" data-menu-id="${esc(menuId)}">删除实际进食</button></div>`:`<div class="actual-meal-actions"><button data-action="add-actual-meal" data-id="${esc(meal.id)}" data-menu-id="${esc(menuId)}">记录实际进食</button></div>`):'';
+  const actualState=actualMealState(meal),ids=`data-id="${esc(meal.id)}" data-menu-id="${esc(menuId)}"`;
+  const deleteActual=`<button class="danger" data-action="delete-actual-meal" ${ids}>删除实际进食</button>`;
+  const actualActions=editable?(actualState.kind==='valid'?`<div class="actual-meal-actions"><button data-action="edit-actual-meal" ${ids}>编辑实际进食</button>${deleteActual}</div>`:actualState.kind==='damaged'?`<div class="actual-meal-actions">${deleteActual}</div>`:`<div class="actual-meal-actions"><button data-action="add-actual-meal" ${ids}>记录实际进食</button></div>`):'';
   const actions=editable?`<div class="button-row"><button data-action="replace-meal" data-id="${esc(meal.id)}" data-menu-id="${esc(menuId)}">换一道</button><button data-action="meal-status" data-id="${esc(meal.id)}" data-menu-id="${esc(menuId)}" data-status="${meal.status==='eaten'?'planned':'eaten'}">${meal.status==='eaten'?'恢复':'已吃'}</button><button data-action="meal-status" data-id="${esc(meal.id)}" data-menu-id="${esc(menuId)}" data-status="${meal.status==='skipped'?'planned':'skipped'}">${meal.status==='skipped'?'恢复':'跳过'}</button></div>`:'';
-  return`<div class="meal-row"><div class="meal-copy"><div class="meal-heading"><b>${esc(item.name)}</b><span class="meal-type">${mealTypeLabels[meal.mealType]||'餐次'}</span><span class="meal-status ${item.statusClass}">${item.status}</span></div><small class="meal-amounts">${esc(item.amounts)}</small>${item.meta?`<small class="meal-meta">${esc(item.meta)}</small>`:''}${actualMealSummary(meal.actualMeal)}${actualActions}</div>${actions}</div>`;
+  return`<div class="meal-row"><div class="meal-copy"><div class="meal-heading"><b>${esc(item.name)}</b><span class="meal-type">${mealTypeLabels[meal.mealType]||'餐次'}</span><span class="meal-status ${item.statusClass}">${item.status}</span></div><small class="meal-amounts">${esc(item.amounts)}</small>${item.meta?`<small class="meal-meta">${esc(item.meta)}</small>`:''}${actualMealSummary(actualState)}${actualActions}</div>${actions}</div>`;
 }
 
 function detailList(items,fallback){

@@ -240,6 +240,8 @@ test('meal cards render escaped actual meal details with safe time and optional 
   assert.doesNotMatch(html,/<img|<script|NaN|Invalid Date/);
   assert.match(html,/时间未知/);
   assert.equal((html.match(/时间未知/g)||[]).length,2);
+  assert.match(html,/<time datetime="2026-08-16T01:10:00.000Z">[^<]+<\/time>/);
+  assert.doesNotMatch(html,/<time[^>]*>时间未知<\/time>/);
   assert.equal((html.match(/class="actual-meal-amount"/g)||[]).length,1);
   assert.equal((html.match(/class="actual-meal-note"/g)||[]).length,1);
 });
@@ -255,6 +257,25 @@ test('actual meal actions respect editability and retain meal and menu ids',()=>
   assert.match(editable,/data-action="delete-actual-meal" data-id="with" data-menu-id="menu-1"/);
   const readonly=mealsView({week:null,weeks:[menu],menuBrowser:{mode:'history',selectedId:'menu-1',editingHistory:false}});
   assert.match(readonly,/aria-label="实际进食记录"/);
+  assert.doesNotMatch(readonly,/data-action="(?:add|edit|delete)-actual-meal"/);
+});
+
+test('damaged own actual meal values stay recoverable without becoming addable records',()=>{
+  const damaged=[
+    {id:'empty',actualMeal:{}},
+    {id:'number-name',actualMeal:{name:7,occurredAt:'2026-08-16T01:10:00.000Z'}},
+    {id:'blank-name',actualMeal:{name:'   ',occurredAt:'2026-08-16T01:10:00.000Z'}},
+    {id:'bad-time',actualMeal:{name:'苹果',occurredAt:'2026-02-30T01:10:00.000Z'}},
+    {id:'null-value',actualMeal:null}
+  ].map(meal=>({name:'计划餐',...meal}));
+  const menu={id:'damaged-menu',startDate:'2026-08-10',days:[{date:'2026-08-10',meals:damaged}]};
+  const editable=mealsView({week:menu,weeks:[menu],menuBrowser:{mode:'current'}});
+  assert.equal((editable.match(/实际进食记录已损坏/g)||[]).length,damaged.length);
+  assert.doesNotMatch(editable,/<time[^>]*>[^<]*时间未知|data-action="add-actual-meal"[^>]*data-id="(?:empty|number-name|blank-name|bad-time|null-value)"/);
+  assert.doesNotMatch(editable,/data-action="edit-actual-meal"[^>]*data-id="(?:empty|number-name|blank-name|bad-time|null-value)"/);
+  for(const {id} of damaged)assert.match(editable,new RegExp(`class="danger" data-action="delete-actual-meal" data-id="${id}" data-menu-id="damaged-menu"`));
+  const readonly=mealsView({week:null,weeks:[menu],menuBrowser:{mode:'history',selectedId:'damaged-menu',editingHistory:false}});
+  assert.equal((readonly.match(/实际进食记录已损坏/g)||[]).length,damaged.length);
   assert.doesNotMatch(readonly,/data-action="(?:add|edit|delete)-actual-meal"/);
 });
 
