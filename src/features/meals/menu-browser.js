@@ -24,9 +24,9 @@ export function updateMenuAtomically({repository,menuId,babyId,mutate}){
   return operation;
 }
 
-export async function runMenuMutation({repository,menuId,babyId,controls=[],prepare=async()=>undefined,mutate,refresh,notify}){
+export async function runMenuMutation({repository,menuId,babyId,controls=[],prepare=async()=>undefined,mutate,refresh,notify,returnCommittedOnRefreshError=false,onRefreshError=()=>{}}){
   controls.forEach(control=>{control.disabled=true});
-  try{let updated;try{const prepared=await prepare();updated=await updateMenuAtomically({repository,menuId,babyId,mutate:value=>mutate(value,prepared)})}catch(error){notify(error.message);return null}try{await refresh()}catch{notify('记录已保存，但页面刷新失败，请重新打开页面')}return updated}finally{controls.forEach(control=>{control.disabled=false})}
+  try{let updated;try{const prepared=await prepare();updated=await updateMenuAtomically({repository,menuId,babyId,mutate:value=>mutate(value,prepared)})}catch(error){notify(error.message);return null}try{await refresh()}catch(error){notify('记录已保存，但页面刷新失败，请重新打开页面');onRefreshError(error);return returnCommittedOnRefreshError?updated:null}return updated}finally{controls.forEach(control=>{control.disabled=false})}
 }
 
 export function runReplaceMenuMutation({repository,store,menuId,mealId,catalog,controls=[],refresh,notify}){
@@ -34,12 +34,12 @@ export function runReplaceMenuMutation({repository,store,menuId,mealId,catalog,c
   return runMenuMutation({repository,menuId,babyId:context.babyId,controls,prepare:async()=>await repository.get('foodPreferences',context.babyId)||{},mutate:(menu,prefs)=>replaceMeal(menu,mealId,catalog,{stage:context.stage,excluded:prefs.excluded||[],favorites:prefs.favorites||[],disliked:prefs.disliked||[]}),refresh,notify});
 }
 
-export function runActualMealMutation({repository,babyId,menuId,mealId,input,now=new Date().toISOString(),controls=[],refresh,notify}){
-  return runMenuMutation({repository,babyId,menuId,controls,mutate:menu=>saveActualMeal(menu,mealId,input,now),refresh,notify});
+export function runActualMealMutation({repository,babyId,menuId,mealId,input,now=new Date().toISOString(),controls=[],refresh,notify,onRefreshError}){
+  return runMenuMutation({repository,babyId,menuId,controls,mutate:menu=>saveActualMeal(menu,mealId,input,now),refresh,notify,returnCommittedOnRefreshError:true,onRefreshError});
 }
 
-export function runActualMealRemoval({repository,babyId,menuId,mealId,now=new Date().toISOString(),controls=[],refresh,notify}){
-  return runMenuMutation({repository,babyId,menuId,controls,mutate:menu=>removeActualMeal(menu,mealId,now),refresh,notify});
+export function runActualMealRemoval({repository,babyId,menuId,mealId,now=new Date().toISOString(),controls=[],refresh,notify,onRefreshError}){
+  return runMenuMutation({repository,babyId,menuId,controls,mutate:menu=>removeActualMeal(menu,mealId,now),refresh,notify,returnCommittedOnRefreshError:true,onRefreshError});
 }
 
 export function resetMenuBrowserForBoundary(browser){browser.reset();return browser.value()}
