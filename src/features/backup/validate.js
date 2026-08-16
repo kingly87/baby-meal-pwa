@@ -1,5 +1,38 @@
 import { SCHEMA_VERSION, STORE_NAMES } from '../../core/schema.js';
 
+const ISO_TIMESTAMP = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.(\d+))?(Z|[+-](\d{2}):(\d{2}))$/;
+
+function isIsoTimestamp(value) {
+  if(typeof value!=='string') return false;
+  const match=ISO_TIMESTAMP.exec(value);
+  if(!match) return false;
+  const [,year,month,date,hour,minute,second,fraction='',zone,offsetHour,offsetMinute]=match;
+  if(zone!=='Z'&&(Number(offsetHour)>23||Number(offsetMinute)>59)) return false;
+  const parts=[year,month,date,hour,minute,second].map(Number),local=new Date(0);
+  local.setUTCFullYear(parts[0],parts[1]-1,parts[2]);
+  local.setUTCHours(parts[3],parts[4],parts[5],Number(fraction.slice(0,3).padEnd(3,'0')));
+  return local.getUTCFullYear()===parts[0]
+    &&local.getUTCMonth()===parts[1]-1
+    &&local.getUTCDate()===parts[2]
+    &&local.getUTCHours()===parts[3]
+    &&local.getUTCMinutes()===parts[4]
+    &&local.getUTCSeconds()===parts[5]
+    &&!Number.isNaN(new Date(value).getTime());
+}
+
+function isActualMeal(value) {
+  return value!==null
+    &&typeof value==='object'
+    &&!Array.isArray(value)
+    &&typeof value.name==='string'
+    &&Boolean(value.name.trim())
+    &&isIsoTimestamp(value.occurredAt)
+    &&typeof value.amount==='string'
+    &&typeof value.note==='string'
+    &&isIsoTimestamp(value.createdAt)
+    &&isIsoTimestamp(value.updatedAt);
+}
+
 export function parseAndValidateBackup(text) {
   let value;
   try { value=typeof text==='string'?JSON.parse(text):structuredClone(text); }
@@ -33,7 +66,7 @@ export function parseAndValidateBackup(text) {
   for(const item of data.sleepSessions)if(!date(item.startAt)||item.endAt&&!date(item.endAt)||item.durationMinutes!=null&&(!Number.isFinite(item.durationMinutes)||item.durationMinutes<0))fail('sleepSessions');
   for(const item of data.dailyRecords)if(!date(item.occurredAt)||!Number.isFinite(item.value)||typeof item.type!=='string')fail('dailyRecords');
   for(const item of data.growthMeasurements)if(!day(item.date)||item.weight!=null&&!Number.isFinite(item.weight)||item.height!=null&&!Number.isFinite(item.height))fail('growthMeasurements');
-  for(const item of data.weeklyMenus)if(!day(item.startDate)||!Array.isArray(item.days)||item.days.some(entry=>!entry||typeof entry!=='object'||!day(entry.date)||!Array.isArray(entry.meals)||entry.meals.some(meal=>!meal||typeof meal!=='object'||typeof meal.id!=='string'||!meal.id.trim()||typeof meal.name!=='string'||!meal.name.trim()||!['planned','eaten','skipped'].includes(meal.status)||meal.mealType!==undefined&&!['breakfast','lunch','dinner'].includes(meal.mealType))))fail('weeklyMenus');
+  for(const item of data.weeklyMenus)if(!day(item.startDate)||!Array.isArray(item.days)||item.days.some(entry=>!entry||typeof entry!=='object'||!day(entry.date)||!Array.isArray(entry.meals)||entry.meals.some(meal=>!meal||typeof meal!=='object'||typeof meal.id!=='string'||!meal.id.trim()||typeof meal.name!=='string'||!meal.name.trim()||!['planned','eaten','skipped'].includes(meal.status)||meal.mealType!==undefined&&!['breakfast','lunch','dinner'].includes(meal.mealType)||Object.hasOwn(meal,'actualMeal')&&!isActualMeal(meal.actualMeal))))fail('weeklyMenus');
   for(const item of data.shoppingItems)if(typeof item.name!=='string'||item.quantity!=null&&(!Number.isFinite(item.quantity)||item.quantity<0))fail('shoppingItems');
   for(const item of data.scheduleTemplates)if(!Array.isArray(item.rules)||!item.rules.length||item.rules.some(rule=>typeof rule.type!=='string'||typeof rule.title!=='string'||!Number.isFinite(rule.afterMinutes)||rule.afterMinutes<0))fail('scheduleTemplates');
   for(const item of data.toothRecords)if(!day(item.date)||!Number.isFinite(item.number)||item.number<1)fail('toothRecords');

@@ -81,6 +81,60 @@ test('backup accepts legacy meals without mealType and all supported meal types'
   assert.equal(result.recordCount,2);
 });
 
+test('backup accepts and imports a complete actual meal without stripping it', async () => {
+  const actualMeal={
+    name:'  Pumpkin porridge  ',
+    occurredAt:'2026-08-15T12:30:00.000Z',
+    amount:'120g',
+    note:'Ate well',
+    createdAt:'2026-08-15T12:31:00.000Z',
+    updatedAt:'2026-08-15T12:32:00.000Z'
+  };
+  const weeklyMenu={id:'w1',babyId:'b1',startDate:'2026-08-10',days:[{
+    date:'2026-08-15',meals:[{id:'m1',name:'Lunch',status:'eaten',actualMeal}]
+  }]};
+  const payload={app:'baby-growth-assistant',schemaVersion:1,data:{
+    babies:[{id:'b1',name:'Baby',stage:'stage4'}],weeklyMenus:[weeklyMenu]
+  }};
+
+  assert.equal(previewBackup(JSON.stringify(payload)).recordCount,2);
+  const repo=new MemoryRepository();
+  await importBackup(repo,JSON.stringify(payload));
+  assert.deepEqual((await repo.list('weeklyMenus'))[0].days[0].meals[0].actualMeal,actualMeal);
+});
+
+test('backup rejects malformed actual meals as weeklyMenus validation errors', () => {
+  const valid={
+    name:'Lunch',occurredAt:'2026-08-15T12:30:00.000Z',amount:'',note:'',
+    createdAt:'2026-08-15T12:31:00.000Z',updatedAt:'2026-08-15T12:32:00.000Z'
+  };
+  const invalid=[
+    null,[],5,'meal',{},
+    {...valid,name:'   '},
+    {...valid,occurredAt:undefined},
+    {...valid,occurredAt:5},
+    {...valid,occurredAt:'invalid'},
+    {...valid,occurredAt:'2026-02-30T12:30:00.000Z'},
+    {...valid,amount:120},
+    {...valid,note:null},
+    {...valid,createdAt:undefined},
+    {...valid,createdAt:5},
+    {...valid,createdAt:'invalid'},
+    {...valid,updatedAt:undefined},
+    {...valid,updatedAt:5},
+    {...valid,updatedAt:'2026-02-30T12:32:00.000Z'}
+  ];
+  for(const actualMeal of invalid) {
+    const weeklyMenus=[{id:'w1',babyId:'b1',startDate:'2026-08-10',days:[{
+      date:'2026-08-15',meals:[{id:'m1',name:'Lunch',status:'eaten',actualMeal}]
+    }]}];
+    assert.throws(
+      ()=>previewBackup(JSON.stringify({app:'baby-growth-assistant',schemaVersion:1,data:{babies:[{id:'b1',name:'Baby'}],weeklyMenus}})),
+      /weeklyMenus.*(?:invalid|无效)/
+    );
+  }
+});
+
 test('backup accepts legacy natural-week menus, exact-date menus and nap interval templates', () => {
   const base={app:'baby-growth-assistant',schemaVersion:1,data:{babies:[{id:'b1',name:'Baby',stage:'stage4'}]}};
   const weeklyMenus=[
