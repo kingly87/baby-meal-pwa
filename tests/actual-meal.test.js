@@ -24,7 +24,7 @@ function menu() {
 
 test('saveActualMeal adds a normalized actual meal without changing plan fields or status', () => {
   const source = menu();
-  const input = { name: '  苹果泥  ', occurredAt: '2026-08-16 07:30:00Z', amount: ' 80g ', note: ' 吃完了 ', markEaten: false };
+  const input = { name: '  苹果泥  ', occurredAt: '2026-08-16T07:30:00Z', amount: ' 80g ', note: ' 吃完了 ', markEaten: false };
   const sourceBefore = structuredClone(source);
   const inputBefore = structuredClone(input);
 
@@ -111,4 +111,69 @@ test('saveActualMeal rejects invalid required input', () => {
   assert.throws(() => saveActualMeal(menu(), 'meal-1', { name: '   ', occurredAt: NOW }, NOW), /实际餐食名称不能为空/);
   assert.throws(() => saveActualMeal(menu(), 'meal-1', { name: '苹果', occurredAt: 'not-a-date' }, NOW), /实际用餐时间无效/);
   assert.throws(() => saveActualMeal(menu(), 'meal-1', { name: '苹果', occurredAt: 123 }, NOW), /实际用餐时间无效/);
+});
+
+test('actual meal operations reject duplicate meal ids without changing the menu', () => {
+  const sameDay = menu();
+  sameDay.days[0].meals.push({ id: 'meal-1', recipeId: 'duplicate-same-day', status: 'planned' });
+  const crossDay = menu();
+  crossDay.days.push({ date: '2026-08-17', meals: [{ id: 'meal-1', recipeId: 'duplicate-cross-day', status: 'planned' }] });
+
+  for (const source of [sameDay, crossDay]) {
+    const before = structuredClone(source);
+    assert.throws(
+      () => saveActualMeal(source, 'meal-1', { name: '苹果', occurredAt: NOW }, NOW),
+      /餐次标识重复/
+    );
+    assert.throws(() => removeActualMeal(source, 'meal-1', NOW), /餐次标识重复/);
+    assert.deepEqual(source, before);
+  }
+});
+
+test('saveActualMeal strictly rejects nonexistent or non-ISO occurredAt timestamps', () => {
+  for (const occurredAt of ['2026-02-30T08:00:00.000Z', '2026-08-16 08:00:00Z', '2026-13-01T08:00:00.000Z']) {
+    assert.throws(
+      () => saveActualMeal(menu(), 'meal-1', { name: '苹果', occurredAt }, NOW),
+      /实际用餐时间无效/
+    );
+  }
+});
+
+test('actual meal operations reject an invalid now timestamp', () => {
+  const input = { name: '苹果', occurredAt: NOW };
+  for (const invalidNow of ['invalid', '2026-02-30T08:00:00.000Z', 123, null]) {
+    assert.throws(() => saveActualMeal(menu(), 'meal-1', input, invalidNow), /更新时间无效/);
+    assert.throws(() => removeActualMeal(menu(), 'meal-1', invalidNow), /更新时间无效/);
+  }
+});
+
+test('saveActualMeal rejects an invalid existing actual meal createdAt', () => {
+  const source = menu();
+  source.days[0].meals[0].actualMeal = {
+    name: '旧记录', occurredAt: NOW, amount: '', note: '', createdAt: 'not-an-iso-time', updatedAt: NOW
+  };
+
+  assert.throws(
+    () => saveActualMeal(source, 'meal-1', { name: '新记录', occurredAt: NOW }, NOW),
+    /实际餐食创建时间无效/
+  );
+});
+
+test('actual meal operations reject malformed menu structures with domain errors', () => {
+  const invalidMenus = [
+    null,
+    {},
+    { days: null },
+    { days: [{}] },
+    { days: [{ meals: null }] },
+    { days: [{ meals: [null] }] }
+  ];
+
+  for (const invalidMenu of invalidMenus) {
+    assert.throws(
+      () => saveActualMeal(invalidMenu, 'meal-1', { name: '苹果', occurredAt: NOW }, NOW),
+      /菜单数据无效/
+    );
+    assert.throws(() => removeActualMeal(invalidMenu, 'meal-1', NOW), /菜单数据无效/);
+  }
 });
