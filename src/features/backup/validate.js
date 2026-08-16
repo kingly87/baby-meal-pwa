@@ -56,7 +56,12 @@ function hasNonPlainActualMeal(value) {
 }
 
 export function parseAndValidateBackup(text) {
-  if(typeof text!=='string'&&hasNonPlainActualMeal(text)) throw new Error('weeklyMenus 包含无效字段');
+  let hasNonPlain=false;
+  if(typeof text!=='string') {
+    try { hasNonPlain=hasNonPlainActualMeal(text); }
+    catch { throw new Error('备份文件无法解析'); }
+  }
+  if(hasNonPlain) throw new Error('weeklyMenus 包含无效字段');
   let value;
   try { value=typeof text==='string'?JSON.parse(text):structuredClone(text); }
   catch { throw new Error('备份文件无法解析'); }

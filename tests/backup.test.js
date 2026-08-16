@@ -155,6 +155,33 @@ test('backup rejects actual meal instances and custom prototypes through the pub
   assert.equal(previewBackup(payload(Object.assign(Object.create(null),fields))).recordCount,2);
 });
 
+test('backup converts object preflight traps into parse errors without leaking native exceptions', () => {
+  const base={app:'baby-growth-assistant',schemaVersion:1,data:{
+    babies:[{id:'b1',name:'Baby'}],weeklyMenus:[]
+  }};
+  const trappedActualMeal=new Proxy({}, {
+    getPrototypeOf() { throw new TypeError('prototype trap'); }
+  });
+  const withTrappedActualMeal=structuredClone(base);
+  withTrappedActualMeal.data.weeklyMenus=[{
+    id:'w1',babyId:'b1',startDate:'2026-08-10',days:[{
+      date:'2026-08-15',meals:[{id:'m1',name:'Lunch',status:'eaten',actualMeal:trappedActualMeal}]
+    }]
+  }];
+  const trappedData={app:'baby-growth-assistant',schemaVersion:1};
+  Object.defineProperty(trappedData,'data',{get(){throw new TypeError('data trap')}});
+  const trappedWeeklyMenus={app:'baby-growth-assistant',schemaVersion:1,data:{babies:[{id:'b1',name:'Baby'}]}};
+  Object.defineProperty(trappedWeeklyMenus.data,'weeklyMenus',{get(){throw new TypeError('menus trap')}});
+
+  for(const payload of [withTrappedActualMeal,trappedData,trappedWeeklyMenus]) {
+    assert.throws(()=>previewBackup(payload),error=>{
+      assert.match(error.message,/无法解析/);
+      assert.doesNotMatch(error.message,/trap/);
+      return true;
+    });
+  }
+});
+
 test('backup accepts legacy natural-week menus, exact-date menus and nap interval templates', () => {
   const base={app:'baby-growth-assistant',schemaVersion:1,data:{babies:[{id:'b1',name:'Baby',stage:'stage4'}]}};
   const weeklyMenus=[
