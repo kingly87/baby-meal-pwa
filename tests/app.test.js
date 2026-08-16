@@ -1,7 +1,30 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { MemoryRepository } from '../src/db.js';
-import { loadApplicationModel, bindOnboardingActions, bindRecipeSearchInput, bindTimelineFilter, ensureDailySchedule, recalculateScheduleForSleep, loadDailyTrend, createTrendState, loadRenderData, runRefreshCycle, createRefreshCoordinator, createAsyncEpoch, runNotificationSchedule, runDataReplacement, changeNotificationScheduling, lockApplicationAfterCommittedReplacement, syncNotifiedTasks, generateCurrentMenu, confirmHistoryEdit, runMenuGeneration, runMenuGenerationClick, growthViewProps } from '../src/app.js';
+import { loadApplicationModel, bindOnboardingActions, bindRecipeSearchInput, bindTimelineFilter, ensureDailySchedule, recalculateScheduleForSleep, loadDailyTrend, createTrendState, loadRenderData, runRefreshCycle, createRefreshCoordinator, createAsyncEpoch, runNotificationSchedule, runDataReplacement, changeNotificationScheduling, lockApplicationAfterCommittedReplacement, syncNotifiedTasks, generateCurrentMenu, confirmHistoryEdit, runMenuGeneration, runMenuGenerationClick, growthViewProps, formatDateTimeLocal, actualMealDialogModel, actualMealFormInput, bindActualMealActions } from '../src/app.js';
+
+test('actual meal dialog defaults today and historical days to local clock and converts form values',()=>{
+  const now=new Date(2026,7,16,9,7,45),today=actualMealDialogModel({day:{date:'2026-08-16'},meal:{status:'planned'},now}),historicalDefault=actualMealDialogModel({day:{date:'2026-08-03'},meal:{status:'planned'},now}),history=actualMealDialogModel({day:{date:'2026-08-03'},meal:{status:'eaten',actualMeal:{name:'粥',occurredAt:'2026-08-03T01:02:00.000Z',amount:'一碗',note:'好'}},now});
+  assert.equal(today.occurredAt,'2026-08-16T09:07');
+  assert.equal(historicalDefault.occurredAt,'2026-08-03T09:07');
+  assert.equal(history.occurredAt,formatDateTimeLocal('2026-08-03T01:02:00.000Z'));
+  assert.equal(history.name,'粥');assert.equal(history.markEaten,true);
+  const input=actualMealFormInput({name:' 苹果 ',occurredAt:'2026-08-16T09:07',amount:' 半碗 ',note:' 好 ',markEaten:'on'});
+  assert.equal(input.name,' 苹果 ');assert.equal(input.markEaten,true);assert.equal(input.occurredAt,new Date(2026,7,16,9,7).toISOString());
+  assert.throws(()=>actualMealFormInput({name:'苹果',occurredAt:'2026-02-30T09:07'}),/实际用餐时间无效/);
+});
+
+test('actual meal binding captures click-time baby, prefills snapshot and deletion cancellation performs zero writes',async()=>{
+  const add={dataset:{action:'add-actual-meal',menuId:'w1',id:'m1'}},del={dataset:{action:'delete-actual-meal',menuId:'w1',id:'m1'}};
+  const document={querySelectorAll:selector=>selector.includes('add-actual-meal')?[add,del]:[]};
+  const week={id:'w1',babyId:'b1',days:[{date:'2026-08-03',meals:[{id:'m1',status:'planned'}]}]},repo=new MemoryRepository({weeklyMenus:[week]}),store={activeBabyId:'b1',weeks:[week]},dialogs=[];
+  bindActualMealActions(document,{repository:repo,store,openDialog:async options=>{dialogs.push(options);store.activeBabyId='b2';await options.onSubmit({name:'苹果',occurredAt:'2026-08-03T09:07',amount:'',note:'',markEaten:'on'})},confirm:()=>false,controlsForMenu:()=>[add,del],refresh:async()=>{},notify:()=>{},now:()=>new Date(2026,7,16,9,7)});
+  await add.onclick();
+  assert.match(dialogs[0].body,/name="name"[^>]*required/);assert.match(dialogs[0].body,/name="occurredAt"[^>]*value="2026-08-03T09:07"[^>]*required/);assert.match(dialogs[0].body,/placeholder="例如：半碗、120 ml"/);
+  assert.equal((await repo.get('weeklyMenus','w1')).days[0].meals[0].actualMeal.name,'苹果');
+  let transactions=0;const original=repo.transaction.bind(repo);repo.transaction=async(...args)=>{transactions++;return original(...args)};
+  await del.onclick();assert.equal(transactions,0);
+});
 
 test('growth view props use already loaded data and isolate the active baby',()=>{
   const allData={growthMeasurements:[{id:'a',babyId:'b1'},{id:'b',babyId:'b2'}],toothRecords:[{id:'t1',babyId:'b1'},{id:'t2',babyId:'b2'}]};

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createMenuBrowser, historyMenus, updateMenuAtomically, runMenuMutation, runReplaceMenuMutation, resetMenuBrowserForBoundary } from '../src/features/meals/menu-browser.js';
+import { createMenuBrowser, historyMenus, updateMenuAtomically, runMenuMutation, runReplaceMenuMutation, runActualMealMutation, runActualMealRemoval, resetMenuBrowserForBoundary } from '../src/features/meals/menu-browser.js';
 import { MemoryRepository } from '../src/db.js';
 
 test('menu browser isolates history editing and resets it when selection changes',()=>{
@@ -34,6 +34,43 @@ test('history excludes only the exact current date and keeps earlier same-week m
 });
 
 const menu=()=>({id:'w1',babyId:'b1',startDate:'2026-08-03',days:[{date:'2026-08-03',meals:[{id:'m1',status:'planned'},{id:'m2',status:'planned'}]}]});
+
+test('actual meal workflow adds, edits, marks eaten and removes through atomic menu writes',async()=>{
+  const repo=new MemoryRepository({weeklyMenus:[menu()]});
+  const common={repository:repo,babyId:'b1',menuId:'w1',mealId:'m1',now:'2026-08-16T02:00:00.000Z',controls:[],refresh:async()=>{},notify:()=>{}};
+  await runActualMealMutation({...common,input:{name:' 苹果 ',occurredAt:'2026-08-16T01:00:00.000Z',amount:'半碗',note:'喜欢',markEaten:false}});
+  let meal=(await repo.get('weeklyMenus','w1')).days[0].meals[0];
+  assert.equal(meal.status,'planned');assert.equal(meal.actualMeal.name,'苹果');
+  await runActualMealMutation({...common,now:'2026-08-16T03:00:00.000Z',input:{name:'香蕉',occurredAt:'2026-08-16T01:30:00.000Z',markEaten:true}});
+  meal=(await repo.get('weeklyMenus','w1')).days[0].meals[0];
+  assert.equal(meal.status,'eaten');assert.equal(meal.actualMeal.name,'香蕉');assert.equal(meal.actualMeal.createdAt,'2026-08-16T02:00:00.000Z');
+  await runActualMealRemoval({...common,now:'2026-08-16T04:00:00.000Z'});
+  meal=(await repo.get('weeklyMenus','w1')).days[0].meals[0];
+  assert.equal(Object.hasOwn(meal,'actualMeal'),false);assert.equal(meal.status,'eaten');
+});
+
+test('actual meal mutation restores controls and notifies on write failure',async()=>{
+  const base=new MemoryRepository({weeklyMenus:[menu()]}),controls=[{disabled:false}],messages=[];
+  const repository={transaction:async(...args)=>base.transaction(...args),get:(...args)=>base.get(...args)};
+  repository.transaction=async()=>{throw new Error('保存失败')};
+  const result=await runActualMealMutation({repository,babyId:'b1',menuId:'w1',mealId:'m1',input:{name:'苹果',occurredAt:'2026-08-16T01:00:00.000Z'},now:'2026-08-16T02:00:00.000Z',controls,refresh:async()=>{},notify:value=>messages.push(value)});
+  assert.equal(result,null);assert.equal(controls[0].disabled,false);assert.deepEqual(messages,['保存失败']);
+});
+
+test('actual meal queued writes preserve concurrent changes and reject deleted or cross-baby targets',async()=>{
+  const repo=new MemoryRepository({weeklyMenus:[menu()]});
+  await Promise.all([
+    runActualMealMutation({repository:repo,babyId:'b1',menuId:'w1',mealId:'m1',input:{name:'苹果',occurredAt:'2026-08-16T01:00:00.000Z'},now:'2026-08-16T02:00:00.000Z',refresh:async()=>{},notify:()=>{}}),
+    updateMenuAtomically({repository:repo,babyId:'b1',menuId:'w1',mutate:value=>({...value,days:value.days.map(day=>({...day,meals:day.meals.map(meal=>meal.id==='m2'?{...meal,status:'skipped'}:meal)}))})})
+  ]);
+  assert.equal((await repo.get('weeklyMenus','w1')).days[0].meals[1].status,'skipped');
+  await repo.delete('weeklyMenus','w1');
+  assert.equal(await runActualMealRemoval({repository:repo,babyId:'b1',menuId:'w1',mealId:'m1',now:'2026-08-16T03:00:00.000Z',refresh:async()=>{},notify:()=>{}}),null);
+  assert.equal(await repo.get('weeklyMenus','w1'),undefined);
+  const other=new MemoryRepository({weeklyMenus:[menu()]});
+  assert.equal(await runActualMealMutation({repository:other,babyId:'b2',menuId:'w1',mealId:'m1',input:{name:'苹果',occurredAt:'2026-08-16T01:00:00.000Z'},now:'2026-08-16T02:00:00.000Z',refresh:async()=>{},notify:()=>{}}),null);
+  assert.equal(Object.hasOwn((await other.get('weeklyMenus','w1')).days[0].meals[0],'actualMeal'),false);
+});
 
 test('atomic menu updates serialize concurrent mutations and preserve both meals',async()=>{
   const repo=new MemoryRepository({weeklyMenus:[menu()]});

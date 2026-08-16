@@ -1,5 +1,6 @@
 import{findMenuForDate}from'./week-menu.js';
 import{replaceMeal}from'./planner.js';
+import{saveActualMeal,removeActualMeal}from'./actual-meal.js';
 
 export function historyMenus(menus,{babyId,date}={}){
   try{findMenuForDate([],{babyId,date})}catch{return[]}
@@ -31,6 +32,14 @@ export async function runMenuMutation({repository,menuId,babyId,controls=[],prep
 export function runReplaceMenuMutation({repository,store,menuId,mealId,catalog,controls=[],refresh,notify}){
   const context={babyId:store.activeBabyId,stage:store.activeBaby?.stage};
   return runMenuMutation({repository,menuId,babyId:context.babyId,controls,prepare:async()=>await repository.get('foodPreferences',context.babyId)||{},mutate:(menu,prefs)=>replaceMeal(menu,mealId,catalog,{stage:context.stage,excluded:prefs.excluded||[],favorites:prefs.favorites||[],disliked:prefs.disliked||[]}),refresh,notify});
+}
+
+export function runActualMealMutation({repository,babyId,menuId,mealId,input,now=new Date().toISOString(),controls=[],refresh,notify}){
+  return runMenuMutation({repository,babyId,menuId,controls,mutate:menu=>saveActualMeal(menu,mealId,input,now),refresh,notify});
+}
+
+export function runActualMealRemoval({repository,babyId,menuId,mealId,now=new Date().toISOString(),controls=[],refresh,notify}){
+  return runMenuMutation({repository,babyId,menuId,controls,mutate:menu=>removeActualMeal(menu,mealId,now),refresh,notify});
 }
 
 export function resetMenuBrowserForBoundary(browser){browser.reset();return browser.value()}
