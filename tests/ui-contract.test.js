@@ -225,6 +225,47 @@ test('history is read only until explicitly editing the selected week',()=>{
   assert.match(editable,/data-action="replace-meal"/);
 });
 
+test('meal cards render escaped actual meal details with safe time and optional fields',()=>{
+  const hostile='<img src=x onerror=alert(1)>&';
+  const week={id:'menu<&',startDate:'2026-08-10',days:[{date:'2026-08-10',meals:[
+    {id:'meal<&',name:'计划粥',actualMeal:{name:hostile,occurredAt:'2026-08-16T01:10:00.000Z',amount:'半碗 <b>&',note:'喜欢 & <script>'}},
+    {id:'legacy',name:'计划面',actualMeal:{name:'苹果',occurredAt:'not-a-date',amount:'',note:''}},
+    {id:'legacy-null',name:'计划饭',actualMeal:{name:'香蕉',occurredAt:null}}
+  ]}]};
+  const html=mealsView({week,weeks:[week],menuBrowser:{mode:'current'}});
+  assert.match(html,/aria-label="实际进食记录"/);
+  assert.match(html,/实际吃了：&lt;img src=x onerror=alert\(1\)&gt;&amp;/);
+  assert.match(html,/半碗 &lt;b&gt;&amp;/);
+  assert.match(html,/喜欢 &amp; &lt;script&gt;/);
+  assert.doesNotMatch(html,/<img|<script|NaN|Invalid Date/);
+  assert.match(html,/时间未知/);
+  assert.equal((html.match(/时间未知/g)||[]).length,2);
+  assert.equal((html.match(/class="actual-meal-amount"/g)||[]).length,1);
+  assert.equal((html.match(/class="actual-meal-note"/g)||[]).length,1);
+});
+
+test('actual meal actions respect editability and retain meal and menu ids',()=>{
+  const menu={id:'menu-1',startDate:'2026-08-03',days:[{date:'2026-08-03',meals:[
+    {id:'without',name:'粥'},
+    {id:'with',name:'面',actualMeal:{name:'香蕉',occurredAt:'2026-08-03T04:00:00.000Z'}}
+  ]}]};
+  const editable=mealsView({week:menu,weeks:[menu],menuBrowser:{mode:'current'}});
+  assert.match(editable,/data-action="add-actual-meal" data-id="without" data-menu-id="menu-1"/);
+  assert.match(editable,/data-action="edit-actual-meal" data-id="with" data-menu-id="menu-1"/);
+  assert.match(editable,/data-action="delete-actual-meal" data-id="with" data-menu-id="menu-1"/);
+  const readonly=mealsView({week:null,weeks:[menu],menuBrowser:{mode:'history',selectedId:'menu-1',editingHistory:false}});
+  assert.match(readonly,/aria-label="实际进食记录"/);
+  assert.doesNotMatch(readonly,/data-action="(?:add|edit|delete)-actual-meal"/);
+});
+
+test('actual meal styles contain long content and preserve mobile tap targets',async()=>{
+  const css=await readFile('assets/styles/app.css','utf8');
+  assert.match(css,/\.actual-meal-summary\s*\{[^}]*min-width:0[^}]*overflow-wrap:anywhere/s);
+  assert.match(css,/\.actual-meal-(?:title|amount|note)[^}]*overflow-wrap:anywhere/s);
+  assert.match(css,/\.actual-meal-actions\s+button\s*\{[^}]*min-height:44px/s);
+  assert.match(css,/@media\(max-width:380px\)[\s\S]*\.actual-meal-actions[^}]*minmax\(0,1fr\)/s);
+});
+
 test('menu history mobile styles wrap controls and long text safely',async()=>{
   const css=await readFile('assets/styles/app.css','utf8');
   assert.match(css,/\.menu-tabs[^}]*minmax\(0,1fr\)/s);

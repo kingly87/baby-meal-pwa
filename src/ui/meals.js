@@ -6,10 +6,25 @@ import{historyMenus}from'../features/meals/menu-browser.js';
 
 const mealTypeLabels={breakfast:'早餐',lunch:'午餐',dinner:'晚餐'};
 
+function actualMealTime(value){
+  if(typeof value!=='string'||!value.trim())return'时间未知';
+  const date=new Date(value);
+  return Number.isNaN(date.getTime())?'时间未知':date.toLocaleString('zh-CN',{year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'});
+}
+
+function actualMealSummary(actualMeal){
+  if(!actualMeal||typeof actualMeal!=='object'||Array.isArray(actualMeal))return'';
+  const amount=typeof actualMeal.amount==='string'&&actualMeal.amount.trim()?`<span class="actual-meal-amount">份量：${esc(actualMeal.amount)}</span>`:'';
+  const note=typeof actualMeal.note==='string'&&actualMeal.note.trim()?`<span class="actual-meal-note">备注：${esc(actualMeal.note)}</span>`:'';
+  return`<section class="actual-meal-summary" aria-label="实际进食记录"><strong class="actual-meal-title">实际吃了：${esc(actualMeal.name??'')}</strong><time>${esc(actualMealTime(actualMeal.occurredAt))}</time>${amount}${note}</section>`;
+}
+
 function weeklyMeal(meal,recipe,{editable=true,menuId}={}){
   const item=presentMeal(meal,recipe);
+  const hasActualMeal=Boolean(meal.actualMeal&&typeof meal.actualMeal==='object'&&!Array.isArray(meal.actualMeal));
+  const actualActions=editable?(hasActualMeal?`<div class="actual-meal-actions"><button data-action="edit-actual-meal" data-id="${esc(meal.id)}" data-menu-id="${esc(menuId)}">编辑实际进食</button><button data-action="delete-actual-meal" data-id="${esc(meal.id)}" data-menu-id="${esc(menuId)}">删除实际进食</button></div>`:`<div class="actual-meal-actions"><button data-action="add-actual-meal" data-id="${esc(meal.id)}" data-menu-id="${esc(menuId)}">记录实际进食</button></div>`):'';
   const actions=editable?`<div class="button-row"><button data-action="replace-meal" data-id="${esc(meal.id)}" data-menu-id="${esc(menuId)}">换一道</button><button data-action="meal-status" data-id="${esc(meal.id)}" data-menu-id="${esc(menuId)}" data-status="${meal.status==='eaten'?'planned':'eaten'}">${meal.status==='eaten'?'恢复':'已吃'}</button><button data-action="meal-status" data-id="${esc(meal.id)}" data-menu-id="${esc(menuId)}" data-status="${meal.status==='skipped'?'planned':'skipped'}">${meal.status==='skipped'?'恢复':'跳过'}</button></div>`:'';
-  return`<div class="meal-row"><div class="meal-copy"><div class="meal-heading"><b>${esc(item.name)}</b><span class="meal-type">${mealTypeLabels[meal.mealType]||'餐次'}</span><span class="meal-status ${item.statusClass}">${item.status}</span></div><small class="meal-amounts">${esc(item.amounts)}</small>${item.meta?`<small class="meal-meta">${esc(item.meta)}</small>`:''}</div>${actions}</div>`;
+  return`<div class="meal-row"><div class="meal-copy"><div class="meal-heading"><b>${esc(item.name)}</b><span class="meal-type">${mealTypeLabels[meal.mealType]||'餐次'}</span><span class="meal-status ${item.statusClass}">${item.status}</span></div><small class="meal-amounts">${esc(item.amounts)}</small>${item.meta?`<small class="meal-meta">${esc(item.meta)}</small>`:''}${actualMealSummary(meal.actualMeal)}${actualActions}</div>${actions}</div>`;
 }
 
 function detailList(items,fallback){
