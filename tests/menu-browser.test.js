@@ -90,10 +90,10 @@ test('atomic menu update never recreates a deleted target or crosses babies',asy
   await assert.rejects(updateMenuAtomically({repository:other,menuId:'w1',babyId:'b2',mutate:value=>value}),/菜单不属于当前宝宝/);
 });
 
-test('menu mutation locks every target control and retries from DB after refresh failure',async()=>{
+test('menu mutation returns the committed update and reports a distinct post-commit refresh failure',async()=>{
   const repo=new MemoryRepository({weeklyMenus:[menu()]}),buttons=[{disabled:false},{disabled:false}],messages=[];
   const first=await runMenuMutation({repository:repo,menuId:'w1',babyId:'b1',controls:buttons,mutate:value=>({...value,days:value.days.map(day=>({...day,meals:day.meals.map(meal=>meal.id==='m1'?{...meal,status:'eaten'}:meal)}))}),refresh:async()=>{throw new Error('刷新失败')},notify:value=>messages.push(value)});
-  assert.equal(first,null);assert.deepEqual(buttons.map(item=>item.disabled),[false,false]);assert.deepEqual(messages,['刷新失败']);
+  assert.equal(first.days[0].meals[0].status,'eaten');assert.deepEqual(buttons.map(item=>item.disabled),[false,false]);assert.deepEqual(messages,['记录已保存，但页面刷新失败，请重新打开页面']);
   await runMenuMutation({repository:repo,menuId:'w1',babyId:'b1',controls:buttons,mutate:value=>({...value,days:value.days.map(day=>({...day,meals:day.meals.map(meal=>meal.id==='m2'?{...meal,status:'skipped'}:meal)}))}),refresh:async()=>{},notify:value=>messages.push(value)});
   assert.deepEqual((await repo.get('weeklyMenus','w1')).days[0].meals.map(item=>item.status),['eaten','skipped']);
 });

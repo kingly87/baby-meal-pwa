@@ -26,7 +26,7 @@ export function updateMenuAtomically({repository,menuId,babyId,mutate}){
 
 export async function runMenuMutation({repository,menuId,babyId,controls=[],prepare=async()=>undefined,mutate,refresh,notify}){
   controls.forEach(control=>{control.disabled=true});
-  try{const prepared=await prepare(),updated=await updateMenuAtomically({repository,menuId,babyId,mutate:value=>mutate(value,prepared)});await refresh();return updated}catch(error){notify(error.message);return null}finally{controls.forEach(control=>{control.disabled=false})}
+  try{let updated;try{const prepared=await prepare();updated=await updateMenuAtomically({repository,menuId,babyId,mutate:value=>mutate(value,prepared)})}catch(error){notify(error.message);return null}try{await refresh()}catch{notify('记录已保存，但页面刷新失败，请重新打开页面')}return updated}finally{controls.forEach(control=>{control.disabled=false})}
 }
 
 export function runReplaceMenuMutation({repository,store,menuId,mealId,catalog,controls=[],refresh,notify}){

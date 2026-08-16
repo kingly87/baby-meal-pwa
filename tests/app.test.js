@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
 import { MemoryRepository } from '../src/db.js';
 import { loadApplicationModel, bindOnboardingActions, bindRecipeSearchInput, bindTimelineFilter, ensureDailySchedule, recalculateScheduleForSleep, loadDailyTrend, createTrendState, loadRenderData, runRefreshCycle, createRefreshCoordinator, createAsyncEpoch, runNotificationSchedule, runDataReplacement, changeNotificationScheduling, lockApplicationAfterCommittedReplacement, syncNotifiedTasks, generateCurrentMenu, confirmHistoryEdit, runMenuGeneration, runMenuGenerationClick, growthViewProps, formatDateTimeLocal, actualMealDialogModel, actualMealFormInput, bindActualMealActions } from '../src/app.js';
 
@@ -12,6 +13,31 @@ test('actual meal dialog defaults today and historical days to local clock and c
   const input=actualMealFormInput({name:' 苹果 ',occurredAt:'2026-08-16T09:07',amount:' 半碗 ',note:' 好 ',markEaten:'on'});
   assert.equal(input.name,' 苹果 ');assert.equal(input.markEaten,true);assert.equal(input.occurredAt,new Date(2026,7,16,9,7).toISOString());
   assert.throws(()=>actualMealFormInput({name:'苹果',occurredAt:'2026-02-30T09:07'}),/实际用餐时间无效/);
+});
+
+test('unchanged DST-fold edit preserves its original ISO instant',()=>{
+  const moduleUrl=new URL('../src/app.js',import.meta.url).href,script=`import {actualMealDialogModel,actualMealFormInput} from ${JSON.stringify(moduleUrl)};const meal={status:'eaten',actualMeal:{name:'粥',occurredAt:'2026-11-01T06:30:00.000Z'}};const model=actualMealDialogModel({day:{date:'2026-11-01'},meal,now:new Date('2026-11-01T12:00:00Z')});process.stdout.write(actualMealFormInput({name:'粥',occurredAt:model.occurredAt},model).occurredAt)`;
+  const result=spawnSync(process.execPath,['--input-type=module','--eval',script],{encoding:'utf8',env:{...process.env,TZ:'America/New_York'}});
+  assert.equal(result.status,0,result.stderr);assert.equal(result.stdout,'2026-11-01T06:30:00.000Z');
+});
+
+test('actual meal checkbox follows real FormData omission and on values',()=>{
+  const unchecked=new FormData(),checked=new FormData();unchecked.set('name','粥');unchecked.set('occurredAt','2026-08-16T09:07');checked.set('name','粥');checked.set('occurredAt','2026-08-16T09:07');checked.set('markEaten','on');
+  assert.equal(actualMealFormInput(Object.fromEntries(unchecked)).markEaten,false);
+  assert.equal(actualMealFormInput(Object.fromEntries(checked)).markEaten,true);
+});
+
+test('actual meal dialog locks its menu for the whole lifetime and ignores reentry',async()=>{
+  const add={disabled:false,dataset:{action:'add-actual-meal',menuId:'w1',id:'m1'}},edit={disabled:false,dataset:{action:'edit-actual-meal',menuId:'w1',id:'m1'}},document={querySelectorAll:()=>[add,edit]},week={id:'w1',babyId:'b1',days:[{date:'2026-08-03',meals:[{id:'m1',status:'planned'}]}]},repo=new MemoryRepository({weeklyMenus:[week]}),store={activeBabyId:'b1',weeks:[week]};
+  let opens=0,finish;const pending=new Promise(resolve=>{finish=resolve});
+  bindActualMealActions(document,{repository:repo,store,openDialog:async()=>{opens++;return pending},controlsForMenu:()=>[add,edit],refresh:async()=>{},notify:()=>{},now:()=>new Date(2026,7,16,9,7)});
+  const first=add.onclick();await edit.onclick();assert.equal(opens,1);assert.deepEqual([add.disabled,edit.disabled],[true,true]);finish(null);await first;assert.deepEqual([add.disabled,edit.disabled],[false,false]);
+});
+
+test('actual meal submit stays locked through refresh and closes after a committed refresh failure',async()=>{
+  const add={disabled:false,dataset:{action:'add-actual-meal',menuId:'w1',id:'m1'}},document={querySelectorAll:()=>[add]},week={id:'w1',babyId:'b1',days:[{date:'2026-08-03',meals:[{id:'m1',status:'planned'}]}]},repo=new MemoryRepository({weeklyMenus:[week]}),store={activeBabyId:'b1',weeks:[week]},messages=[];
+  bindActualMealActions(document,{repository:repo,store,openDialog:async options=>{assert.equal(add.disabled,true);const result=await options.onSubmit({name:'粥',occurredAt:'2026-08-03T09:07'});assert.equal(add.disabled,true);return result},controlsForMenu:()=>[add],refresh:async()=>{assert.equal(add.disabled,true);throw new Error('刷新失败')},notify:value=>messages.push(value),now:()=>new Date(2026,7,16,9,7)});
+  await add.onclick();assert.equal(add.disabled,false);assert.equal((await repo.get('weeklyMenus','w1')).days[0].meals[0].actualMeal.name,'粥');assert.deepEqual(messages,['记录已保存，但页面刷新失败，请重新打开页面']);
 });
 
 test('actual meal binding captures click-time baby, prefills snapshot and deletion cancellation performs zero writes',async()=>{
