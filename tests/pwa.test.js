@@ -20,9 +20,9 @@ test('manifest identifies installable V1 with 192 and 512 icons', async () => {
 
 test('service worker has safe caching, navigation fallback and controlled updates', async () => {
   const sw=await readFile('service-worker.js','utf8');
-  assert.ok(sw.includes("const CACHE_NAME='baby-growth-v1-20260720-r29'"));
+  assert.ok(sw.includes("const CACHE_NAME='baby-growth-v1-20260720-r30'"));
   for(const token of ['response.ok','request.mode === \'navigate\'','SKIP_WAITING','caches.delete','notificationclick','showNotification']) assert.ok(sw.includes(token),token);
-  const appFiles=['./','./index.html','./assets/styles/app.css','./data/recipes.js','./data/stage4-recipes-v2.js','./data/stage4-recipes-v2-rows.js','./src/app.js','./src/features/growth/latest-summary.js','./src/features/meals/recipe-details.js','./src/features/migration/v2.js','./src/ui/daily-trends.js','./manifest.webmanifest'];
+  const appFiles=['./','./index.html','./assets/styles/app.css','./data/recipes.js','./data/stage4-recipes-v2.js','./data/stage4-recipes-v2-rows.js','./src/app.js','./src/features/growth/latest-summary.js','./src/features/meals/actual-meal.js','./src/features/meals/recipe-details.js','./src/features/migration/v2.js','./src/ui/daily-trends.js','./manifest.webmanifest'];
   for(const file of appFiles) assert.ok(sw.includes(JSON.stringify(file)),file);
   for(const file of await javascriptFiles('src')) assert.ok(sw.includes(JSON.stringify(`./${file}`)),`missing offline cache entry: ${file}`);
 });
@@ -36,14 +36,14 @@ test('service worker activation deletes only obsolete caches owned by this appli
     location:{origin:'https://example.test'}
   };
   const caches={
-    keys:async()=>['baby-growth-v1-20260720-r28','baby-growth-v1-20260720-r29','other-app-cache'],
+    keys:async()=>['baby-growth-v1-20260720-r29','baby-growth-v1-20260720-r30','other-app-cache'],
     delete:async key=>{deleted.push(key); return true}
   };
   vm.runInNewContext(await readFile('service-worker.js','utf8'),{self,caches,URL});
   let activation;
   listeners.activate({waitUntil(promise){activation=promise}});
   await activation;
-  assert.deepEqual(deleted,['baby-growth-v1-20260720-r28']);
+  assert.deepEqual(deleted,['baby-growth-v1-20260720-r29']);
 });
 
 test('service worker reads only the current application cache', async () => {
@@ -61,7 +61,7 @@ test('service worker reads only the current application cache', async () => {
     clients:{},location:{origin:'https://example.test'}
   };
   const caches={
-    open:async name=>{assert.equal(name,'baby-growth-v1-20260720-r29'); return activeCache},
+    open:async name=>{assert.equal(name,'baby-growth-v1-20260720-r30'); return activeCache},
     match:async()=>{globalReads++; return {source:'other-cache'}}
   };
   const fetch=async request=>{if(request.mode==='navigate')throw new Error('offline'); return networkResponse};
