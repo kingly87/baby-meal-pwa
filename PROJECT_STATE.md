@@ -4,9 +4,9 @@
 
 - Service Worker cache revision is `baby-growth-v1-20260720-r30`; the application shell includes every JavaScript file under `src`, including `src/features/meals/actual-meal.js`.
 - Automated Service Worker tests continue to verify app-owned obsolete-cache cleanup, current-cache-only reads, navigation network-first behavior, and asset cache-first behavior.
-- Automated verification: `npm.cmd test` passed all 340 tests.
+- Automated verification: `npm.cmd test` passed all 341 tests.
 - Local browser acceptance at 375px and 320px found no document-level horizontal overflow and no visible form control below 44px high. Saving an unchecked actual meal kept its plan status unchanged; saving a checked actual meal changed the status to eaten; editing retained the planned recipe while updating the actual meal name, time, amount, and note.
-- Browser acceptance of delete cancellation/confirmation, history read-only unlocking, and V1 export/restore into a cleared isolated origin was not completed in this verification run.
+- Additional isolated-origin browser acceptance restored a V1 backup containing current and historical `actualMeal` records, displayed the restored current record, kept historical actual-meal actions hidden before unlocking, and exposed edit/delete only after “修改记录”. Confirmed deletion removed only the actual-meal summary; deletion cancellation remains covered by automated behavior tests rather than a completed browser interaction.
 
 ## 2026-08-15 Rolling-menu mobile release
 
