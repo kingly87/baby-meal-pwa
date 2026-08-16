@@ -135,6 +135,26 @@ test('backup rejects malformed actual meals as weeklyMenus validation errors', (
   }
 });
 
+test('backup rejects actual meal instances and custom prototypes through the public object API', () => {
+  const fields={
+    name:'Lunch',occurredAt:'2026-08-15T12:30:00.000Z',amount:'',note:'',
+    createdAt:'2026-08-15T12:31:00.000Z',updatedAt:'2026-08-15T12:32:00.000Z'
+  };
+  class ActualMeal { constructor() { Object.assign(this,fields); } }
+  const customPrototype=Object.assign(Object.create({kind:'actual-meal'}),fields);
+  const payload=actualMeal=>({app:'baby-growth-assistant',schemaVersion:1,data:{
+    babies:[{id:'b1',name:'Baby'}],
+    weeklyMenus:[{id:'w1',babyId:'b1',startDate:'2026-08-10',days:[{
+      date:'2026-08-15',meals:[{id:'m1',name:'Lunch',status:'eaten',actualMeal}]
+    }]}]
+  }});
+
+  for(const actualMeal of [new ActualMeal(),customPrototype]) {
+    assert.throws(()=>previewBackup(payload(actualMeal)),/weeklyMenus.*(?:invalid|无效)/);
+  }
+  assert.equal(previewBackup(payload(Object.assign(Object.create(null),fields))).recordCount,2);
+});
+
 test('backup accepts legacy natural-week menus, exact-date menus and nap interval templates', () => {
   const base={app:'baby-growth-assistant',schemaVersion:1,data:{babies:[{id:'b1',name:'Baby',stage:'stage4'}]}};
   const weeklyMenus=[

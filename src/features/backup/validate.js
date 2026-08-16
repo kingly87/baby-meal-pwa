@@ -20,10 +20,14 @@ function isIsoTimestamp(value) {
     &&!Number.isNaN(new Date(value).getTime());
 }
 
+function isPlainObject(value) {
+  if(value===null||typeof value!=='object'||Array.isArray(value)) return false;
+  const prototype=Object.getPrototypeOf(value);
+  return prototype===Object.prototype||prototype===null;
+}
+
 function isActualMeal(value) {
-  return value!==null
-    &&typeof value==='object'
-    &&!Array.isArray(value)
+  return isPlainObject(value)
     &&typeof value.name==='string'
     &&Boolean(value.name.trim())
     &&isIsoTimestamp(value.occurredAt)
@@ -33,7 +37,26 @@ function isActualMeal(value) {
     &&isIsoTimestamp(value.updatedAt);
 }
 
+function hasNonPlainActualMeal(value) {
+  const weeklyMenus=value?.data?.weeklyMenus;
+  if(!Array.isArray(weeklyMenus)) return false;
+  for(const menu of weeklyMenus) {
+    if(!Array.isArray(menu?.days)) continue;
+    for(const entry of menu.days) {
+      if(!Array.isArray(entry?.meals)) continue;
+      for(const meal of entry.meals) {
+        if(!meal||typeof meal!=='object'||!Object.hasOwn(meal,'actualMeal')) continue;
+        const actualMeal=meal.actualMeal;
+        if(!actualMeal||typeof actualMeal!=='object'||Array.isArray(actualMeal)) continue;
+        if(!isPlainObject(actualMeal)) return true;
+      }
+    }
+  }
+  return false;
+}
+
 export function parseAndValidateBackup(text) {
+  if(typeof text!=='string'&&hasNonPlainActualMeal(text)) throw new Error('weeklyMenus 包含无效字段');
   let value;
   try { value=typeof text==='string'?JSON.parse(text):structuredClone(text); }
   catch { throw new Error('备份文件无法解析'); }
