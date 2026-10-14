@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { execFileSync } from 'node:child_process';
 import { readFile } from 'node:fs/promises';
 import { todayView } from '../src/ui/today.js';
 import { formatTimelineDate } from '../src/ui/render.js';
@@ -390,6 +391,60 @@ test('malformed legacy recipe arrays never throw or inject markup', () => {
   const html=mealsView({recipes:[malformed],stage:'stage4'});
   assert.doesNotMatch(html,/<script>|<img|<b>/);
   assert.match(html,/&lt;script&gt;alert\(1\)&lt;\/script&gt;/);
+});
+
+test('records history interleaves every type by its business time',()=>{
+  const html=recordsView({
+    records:[{id:'record',type:'milk',value:120,occurredAt:'2026-08-15T08:00:00'}],
+    sleeps:[{id:'sleep',type:'nap',startAt:'2026-08-15T09:00:00',endAt:'2026-08-15T10:00:00',durationMinutes:60}],
+    observations:[{id:'food',name:'南瓜',date:'2026-08-14',observeUntil:'2026-12-31',reactions:[]}],
+    reminders:[
+      {id:'latest',title:'最新提醒',dueDate:'2026-08-15T10:00:00'},
+      {id:'completed',title:'旧提醒',dueDate:'2026-08-13T10:00:00',completedAt:'2026-10-01T10:00:00'}
+    ]
+  });
+  const positions=['最新提醒','午间小睡 · 60 分钟','奶量 · 120','新食物 · 南瓜','旧提醒'].map(text=>html.indexOf(text));
+  assert.ok(positions.every(position=>position>=0));
+  assert.deepEqual(positions,[...positions].sort((a,b)=>a-b));
+});
+
+test('records history uses stable local-day ties and leaves invalid times last without mutation',()=>{
+  const input={
+    records:[
+      {id:'record-b',type:'milk',value:222,occurredAt:'2026-08-16T00:00:00'},
+      {id:'record-a',type:'milk',value:111,occurredAt:'2026-08-16T00:00:00'},
+      {id:'invalid',type:'water',value:99,occurredAt:'not-a-date'}
+    ],
+    sleeps:[{id:'sleep',type:'nap',startAt:'2026-08-16T00:00:00',endAt:'2026-08-16T00:30:00',durationMinutes:30}],
+    observations:[{id:'food',name:'胡萝卜',date:'2026-08-16',observeUntil:'2026-08-18',reactions:[]}],
+    reminders:[{id:'reminder',title:'并列提醒',dueDate:'2026-08-16'}]
+  };
+  const snapshot=structuredClone(input);
+  let html='';
+  assert.doesNotThrow(()=>{html=recordsView(input)});
+  const positions=['奶量 · 111','奶量 · 222','午间小睡 · 30 分钟','新食物 · 胡萝卜','并列提醒','喝水 · 99'].map(text=>html.indexOf(text));
+  assert.ok(positions.every(position=>position>=0));
+  assert.deepEqual(positions,[...positions].sort((a,b)=>a-b));
+  assert.deepEqual(input,snapshot);
+});
+
+test('records history orders local midnight correctly in a non-UTC timezone',()=>{
+  const script=`
+    import { recordsView } from './src/ui/records.js';
+    const html=recordsView({
+      records:[{id:'record',type:'milk',value:120,occurredAt:'2026-08-15T18:00:00Z'}],
+      sleeps:[{id:'sleep',type:'nap',startAt:'2026-08-15T20:00:00Z',endAt:'2026-08-15T21:00:00Z',durationMinutes:60}],
+      reminders:[{id:'reminder',title:'本地零点提醒',dueDate:'2026-08-16'}]
+    });
+    console.log(JSON.stringify(['午间小睡 · 60 分钟','奶量 · 120','本地零点提醒'].map(text=>html.indexOf(text))));
+  `;
+  const positions=JSON.parse(execFileSync(process.execPath,['--input-type=module','--eval',script],{
+    cwd:process.cwd(),
+    env:{...process.env,TZ:'Asia/Shanghai'},
+    encoding:'utf8'
+  }));
+  assert.ok(positions.every(position=>position>=0));
+  assert.deepEqual(positions,[...positions].sort((a,b)=>a-b));
 });
 
 test('records screen preserves stable record management controls', () => {
