@@ -408,6 +408,16 @@ test('records history interleaves every type by its business time',()=>{
   assert.deepEqual(positions,[...positions].sort((a,b)=>a-b));
 });
 
+test('records history parses date-only years below 100 without Date constructor remapping',()=>{
+  const html=recordsView({
+    records:[{id:'record',type:'milk',value:120,occurredAt:'0098-12-31T23:59:00'}],
+    reminders:[{id:'reminder',title:'早期年份提醒',dueDate:'0099-01-01'}]
+  });
+  const reminderPosition=html.indexOf('早期年份提醒'),recordPosition=html.indexOf('奶量 · 120');
+  assert.ok(reminderPosition>=0&&recordPosition>=0);
+  assert.ok(reminderPosition<recordPosition);
+});
+
 test('records history uses stable local-day ties and leaves invalid times last without mutation',()=>{
   const input={
     records:[
