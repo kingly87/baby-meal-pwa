@@ -1,5 +1,12 @@
 # PROJECT_STATE
 
+## 2026-10-14 最近记录与提醒统一排序
+
+- “最近记录与提醒”已将日常记录、已结束睡眠、新食材观察和提醒合并为一条按业务时间倒序的时间线；相同时间按固定类型与 ID 稳定排序，无效时间保留并置于末尾。
+- 日常记录使用 `occurredAt`，睡眠使用 `startAt`，新食材使用首次尝试 `date`，提醒无论是否完成均使用原定 `dueDate`；现有数据与备份结构无需迁移。
+- Service Worker 缓存修订升级为 `baby-growth-v1-20260720-r31`。
+- 自动化验证：`npm.cmd run check`、`npm.cmd test`（345 项）和任务范围 `git diff --check` 通过；375px 手机视口真实 UI 验收确认跨类型排序、完成旧提醒不跳顶、刷新顺序稳定且无文档级横向溢出。
+
 ## 2026-08-16 Actual-meal release preparation
 
 - Service Worker cache revision is `baby-growth-v1-20260720-r30`; the application shell includes every JavaScript file under `src`, including `src/features/meals/actual-meal.js`.
