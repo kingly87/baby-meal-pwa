@@ -105,6 +105,8 @@ test('styles readable value labels, seven-day fitting and explicit horizontal sc
   assert.match(css,/\.trend-missing-mark\{[^}]*stroke-dasharray/s);
   assert.match(css,/\.trend-bar:focus[^}]*\.trend-hit-target\{[^}]*stroke:/s);
   assert.match(css,/\.trend-metrics\{grid-template-columns:repeat\(2,minmax\(0,1fr\)\)/);
+  assert.match(css,/\.trend-metrics button,\.trend-ranges button\{[^}]*background:var\(--surface\)[^}]*color:var\(--ink\)/s);
+  assert.match(css,/\.trend-metrics button\[aria-pressed="true"\],\.trend-ranges button\[aria-pressed="true"\]\{[^}]*background:var\(--accent\)[^}]*color:#fff/s);
   assert.ok(css.includes('.visually-hidden'));
   assert.equal((css.match(/\.trend-chart\{/g)||[]).length,2);
   assert.doesNotMatch(css,/--trend-count|grid-template-rows:1fr 22px|\.trend-date-placeholder/);
